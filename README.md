@@ -1,6 +1,6 @@
 # gohessian #
 ---
-*witten by AlexStocks on 2016/10/25*
+*rewritten by AlexStocks on 2016/10/25*
 
 ## readme
 ---

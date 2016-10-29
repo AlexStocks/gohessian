@@ -287,7 +287,7 @@ func TestDecodeMap(t *testing.T) {
 type Foo struct {
 	bar int
 	baz string
-	qux map[string]int
+	qux map[Any]Any
 }
 
 func (f Foo) GetType() string {
@@ -310,11 +310,11 @@ func (f *Foo) SetBaz(baz string) {
 	f.baz = baz
 }
 
-func (f *Foo) GetQux() map[string]int {
+func (f *Foo) GetQux() map[Any]Any {
 	return f.qux
 }
 
-func (f *Foo) SetQux(qux map[string]int) {
+func (f *Foo) SetQux(qux map[Any]Any) {
 	f.qux = qux
 }
 
@@ -326,7 +326,7 @@ func TestDecodeStruct(t *testing.T) {
 		s   interface{}
 	)
 
-	foo = Foo{bar: 100, baz: "baz"} //, qux: map[string]int{}}
+	foo = Foo{bar: 100, baz: "baz", qux: make(map[Any]Any)}
 	// foo.qux["qux"] = 1e3
 	RegisterPOJO(foo)
 	b = Encode(&foo, b)

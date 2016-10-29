@@ -21,8 +21,6 @@ const (
 	// DATATYPE_URL = "http://192.168.35.3:8000/datatype" //数据类型测试结果,传入参数，返回该参数的(响应)编码结果
 )
 
-// attention that: the server is https://github.com/AlexStocks/dubbogo-examples/tree/master/calculator/java-server
-
 func TestHttpPost(t *testing.T) {
 	t.SkipNow() // 跳过这个错误测试
 	fmt.Println("\ntest http post")

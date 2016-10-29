@@ -290,12 +290,16 @@ func (this *Decoder) Decode() (interface{}, error) {
 			return m, nil
 
 		} else {
+			fmt.Println("hello1")
 			inst = createInstance(t)
 			for this.peekByte() != 'z' {
 				if key, err = this.Decode(); err != nil {
+					fmt.Printf("key err:%#v", err)
 					return nil, err
 				}
+				fmt.Printf("key:%#v\n", key)
 				if value, err = this.Decode(); err != nil {
+					fmt.Printf("value err:%#v", err)
 					return nil, err
 				}
 				//set value of the struct to Zero
@@ -309,6 +313,7 @@ func (this *Decoder) Decode() (interface{}, error) {
 
 					args = args[:0]
 					args = append(args, fieldValue)
+					fmt.Println("hello2")
 					reflect.ValueOf(inst).MethodByName(methodName).Call(args)
 				}
 			}

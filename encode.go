@@ -19,6 +19,7 @@ import (
 )
 
 import (
+	"fmt"
 	"github.com/AlexStocks/goext/strings"
 	log "github.com/AlexStocks/log4go"
 )
@@ -315,6 +316,9 @@ func encMapByReflect(m interface{}, b []byte) []byte {
 	value = reflect.ValueOf(m)
 	typ = reflect.TypeOf(m).Key()
 	keys = value.MapKeys()
+	if len(keys) == 0 {
+		return b
+	}
 	for i := 0; i < len(keys); i++ {
 		k := buildMapKey(keys[i], typ)
 		if k == nil {
@@ -335,6 +339,7 @@ func encMapByReflect(m interface{}, b []byte) []byte {
 func encStruct(v Any, b []byte) []byte {
 	var (
 		i          int
+		l          int
 		length     int
 		str        string
 		buf        *bytes.Buffer
@@ -358,6 +363,7 @@ func encStruct(v Any, b []byte) []byte {
 	b = append(b, 'M')
 	//encode type Name
 	b = append(b, 't')
+	// encode struct name
 	typeName = methodType.Call([]reflect.Value{})[0] //call return [string,]
 	buf = bytes.NewBufferString(typeName.String())
 	length = utf8.RuneCount(buf.Bytes())
@@ -386,11 +392,20 @@ func encStruct(v Any, b []byte) []byte {
 		} else {
 			str = string(method.Name[3])
 		}
+		// key
+		l = len(b)
 		b = encString(str+method.Name[4:], b)
+		length = len(b)
 
-		//value
+		// value
 		rvArray = vV.Method(i).Call([]reflect.Value{}) //return [] reflect.Value
 		b = Encode(rvArray[0].Interface(), b)          //GetXXX returns [string,]
+		// 如果值为空就不向b里面填充key了
+		if len(b) == length {
+			fmt.Printf("key:%s, rvArray:%#v, %v, %v, %v\n", str+method.Name[4:], rvArray, rvArray == nil, len(rvArray), rvArray[0])
+			b = b[:l]
+			continue
+		}
 	} //end of for
 
 	return append(b, 'z')

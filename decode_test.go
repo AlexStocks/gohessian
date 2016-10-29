@@ -339,11 +339,11 @@ func TestDecodeStruct(t *testing.T) {
 	if err != nil {
 		t.Errorf("fail to parse []byte{%#v}", b)
 	}
-	fmt.Printf("hessian.Decode(encStruct(%#v)) = {%#v}", foo, s)
+	// fmt.Printf("hessian.Decode(encStruct(%#v)) = {%#v}", foo, s)
 	if _, ok := s.(Foo); ok {
-		fmt.Printf("Foo\n")
+		fmt.Printf("Foo{%#v}\n", s.(Foo))
 	}
 	if _, ok := s.(*Foo); ok {
-		fmt.Printf("*Foo\n")
+		fmt.Printf("*Foo{%#v}\n", s.(*Foo))
 	}
 }

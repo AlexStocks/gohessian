@@ -12,6 +12,6 @@ package hessian
 
 const (
 	// dubbogo version
-	Version string = "0.0.1"
+	Version string = "0.1.2"
 	DATE           = "2016/10/29"
 )

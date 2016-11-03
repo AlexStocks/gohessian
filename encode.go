@@ -223,13 +223,13 @@ func encBinary(v []byte, b []byte) []byte {
 	vLength = len(v)
 	for vLength > 0 {
 		// if vBuf.Len() > CHUNK_SIZE {
-		if len(v) > CHUNK_SIZE {
+		if vLength > CHUNK_SIZE {
 			tag = 'b'
 			length = uint16(CHUNK_SIZE)
 		} else {
 			tag = 'B'
 			// length = uint16(vBuf.Len())
-			length = uint16(len(v))
+			length = uint16(vLength)
 		}
 
 		b = append(b, tag)

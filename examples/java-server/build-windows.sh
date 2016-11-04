@@ -12,7 +12,7 @@ rm ./HessianServer.jar
 cp="./"
 for j in $(ls ../java-lib)
 do
-  cp+=";../java-lib/$j"   # windowsÖÐÓÃ·ÖºÅ£¬linuxÖÐÓÃÃ°ºÅ
+  cp+=";../java-lib/$j"   # windowsï¿½ï¿½ï¿½Ã·ÖºÅ£ï¿½linuxï¿½ï¿½ï¿½ï¿½Ã°ï¿½ï¿½
 done
 
 JAVA_OPT=" -DDEBUG -server -Dorg.eclipse.jetty.util.log.class=org.eclipse.jetty.util.log.Slf4Log "
@@ -23,7 +23,11 @@ javac -classpath $cp ./src/com/ikurento/hessian/*.java -d ./ # ./src/com/ikurent
 # java $JAVA_OPT -classpath $cp HessianServer
 jar cvmf ./META-INF/MANIFEST.MF HessianServer.jar ./com/ikurento/hessian/* # ../java-lib/*
 # jar -xf HessianServer.jar
+# jar -xvf HessianServer.jar
+# jar -cvf server.jar server
+# jar -cvfe server.jar server com.ikurento.HelloService
 rm -rf ./com
 cp+=";./HessianServer.jar"
+# javar -jar HessianServer.jar
 java $JAVA_OPT -classpath $cp com.ikurento.hessian.HessianServer
 rm ./HessianServer.jar

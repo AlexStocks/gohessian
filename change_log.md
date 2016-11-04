@@ -10,6 +10,10 @@
 ---
 *本项目其实是从2016/10/21开始进行改造测试的工作了，但2016/10/28才上传到github上，所以dev list只能从29号开始记了*
 
+### 2016-11-04 ###
+---
+- 1 添加hessian2支持
+
 ### 2016-10-28 ###
 ---
 - 1 添加github.com/AlexStocks/gohessian/encode.go:encMapByReflect函数，以编码诸如map[int]string等非map[Any]Any类型的map

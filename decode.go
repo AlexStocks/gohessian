@@ -19,7 +19,11 @@ import (
 
 type Decoder struct {
 	reader *bufio.Reader
-	refs   []Any
+	// structRegistry map[string]reflect.Type // 注册struct
+	// typList        []string
+	// refs           []interface{}
+	// clsDefList     []classDef // 解析过程中使用
+	refs []Any
 }
 
 var (
@@ -353,5 +357,43 @@ func (this *Decoder) Decode() (interface{}, error) {
 
 	default:
 		return nil, fmt.Errorf("Invalid type: %v,>>%v<<<", string(t), this.peek(this.len()))
+	}
+}
+
+func (d *Decoder) readInt(flag int32) (interface{}, error) {
+	var tag byte
+	if flag != TAG_READ {
+		tag = byte(flag)
+	} else {
+		tag, _ = d.readByte()
+	}
+
+	switch {
+	//direct integer
+	case tag >= 0x80 && tag <= 0xbf:
+		return int32(tag - BC_INT_ZERO), nil
+	case tag >= 0xc0 && tag <= 0xcf:
+		bf := make([]byte, 1)
+		if _, err := io.ReadFull(d.reader, bf); err != nil {
+			return nil, newCodecError("short integer", err)
+		}
+		return int32(tag-BC_INT_BYTE_ZERO)<<8 + int32(bf[0]), nil
+	case tag >= 0xd0 && tag <= 0xd7:
+		bf := make([]byte, 2)
+		if _, err := io.ReadFull(d.reader, bf); err != nil {
+			return nil, newCodecError("short integer", err)
+		}
+		i := int32(tag-BC_INT_SHORT_ZERO)<<16 + int32(bf[1])<<8 + int32(bf[0])
+		return i, nil
+	case tag == BC_INT:
+		buf := make([]byte, 4)
+		if _, err := io.ReadFull(d.reader, buf); err != nil {
+			return nil, newCodecError("parse int", err)
+		}
+		i := int32(buf[0])<<24 + int32(buf[1])<<16 + int32(buf[2])<<8 + int32(buf[3])
+		return i, nil
+	default:
+		return nil, newCodecError("integer wrong tag:" + fmt.Sprintf("%d-%#x", int(tag), tag))
+
 	}
 }

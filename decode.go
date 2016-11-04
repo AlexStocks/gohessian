@@ -11,8 +11,10 @@ package hessian
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"time"
 )
@@ -360,8 +362,13 @@ func (this *Decoder) Decode() (interface{}, error) {
 	}
 }
 
-func (d *Decoder) readInt(flag int32) (interface{}, error) {
-	var tag byte
+func (d *Decoder) readInt32(flag int32) (interface{}, error) {
+	var (
+		err error
+		tag byte
+		buf [8]byte
+	)
+
 	if flag != TAG_READ {
 		tag = byte(flag)
 	} else {
@@ -372,28 +379,236 @@ func (d *Decoder) readInt(flag int32) (interface{}, error) {
 	//direct integer
 	case tag >= 0x80 && tag <= 0xbf:
 		return int32(tag - BC_INT_ZERO), nil
+
 	case tag >= 0xc0 && tag <= 0xcf:
-		bf := make([]byte, 1)
-		if _, err := io.ReadFull(d.reader, bf); err != nil {
+		if _, err = io.ReadFull(d.reader, buf[:1]); err != nil {
 			return nil, newCodecError("short integer", err)
 		}
-		return int32(tag-BC_INT_BYTE_ZERO)<<8 + int32(bf[0]), nil
+		return int32(tag-BC_INT_BYTE_ZERO)<<8 + int32(buf[0]), nil
+
 	case tag >= 0xd0 && tag <= 0xd7:
-		bf := make([]byte, 2)
-		if _, err := io.ReadFull(d.reader, bf); err != nil {
+		if _, err = io.ReadFull(d.reader, buf[:2]); err != nil {
 			return nil, newCodecError("short integer", err)
 		}
-		i := int32(tag-BC_INT_SHORT_ZERO)<<16 + int32(bf[1])<<8 + int32(bf[0])
-		return i, nil
+		return int32(tag-BC_INT_SHORT_ZERO)<<16 + int32(buf[1])<<8 + int32(buf[0]), nil
+
 	case tag == BC_INT:
 		buf := make([]byte, 4)
 		if _, err := io.ReadFull(d.reader, buf); err != nil {
 			return nil, newCodecError("parse int", err)
 		}
-		i := int32(buf[0])<<24 + int32(buf[1])<<16 + int32(buf[2])<<8 + int32(buf[3])
-		return i, nil
+		return int32(buf[0])<<24 + int32(buf[1])<<16 + int32(buf[2])<<8 + int32(buf[3]), nil
+
 	default:
 		return nil, newCodecError("integer wrong tag:" + fmt.Sprintf("%d-%#x", int(tag), tag))
-
 	}
+}
+
+func (d *Decoder) readInt64(flag int32) (interface{}, error) {
+	var (
+		err error
+		tag byte
+		buf [8]byte
+	)
+
+	if flag != TAG_READ {
+		tag = byte(flag)
+	} else {
+		tag, _ = d.readByte()
+	}
+
+	switch {
+	case tag >= 0xd8 && tag <= 0xef:
+		return int64(tag - BC_LONG_ZERO), nil
+
+	case tag >= 0xf4 && tag <= 0xff:
+		if _, err = io.ReadFull(d.reader, buf[:1]); err != nil {
+			return nil, newCodecError("short integer", err)
+		}
+		return int64(tag-BC_LONG_BYTE_ZERO)<<8 + int64(buf[0]), nil
+
+	case tag >= 0x38 && tag <= 0x3f:
+		if _, err := io.ReadFull(d.reader, buf[:2]); err != nil {
+			return nil, newCodecError("short integer", err)
+		}
+
+		return int64(tag-BC_LONG_SHORT_ZERO)<<16 + int64(buf[1])<<8 + int64(buf[0]), nil
+
+	case tag == BC_LONG:
+		if _, err := io.ReadFull(d.reader, buf[:8]); err != nil {
+			return nil, newCodecError("parse long", err)
+		}
+		return int64(buf[0])<<56 + int64(buf[1])<<48 + int64(buf[2])<<40 + int64(buf[3])<<32 +
+			int64(buf[4])<<24 + int64(buf[5])<<16 + int64(buf[6])<<8 + int64(buf[7]), nil
+
+	default:
+		return nil, newCodecError("long wrong tag " + fmt.Sprintf("%d-%#x", int(tag), tag))
+	}
+}
+
+func (d *Decoder) readDouble(flag int32) (interface{}, error) {
+	var (
+		err error
+		tag byte
+		buf [8]byte
+	)
+
+	if flag != TAG_READ {
+		tag = byte(flag)
+	} else {
+		tag, _ = d.readByte()
+	}
+	switch tag {
+	case BC_LONG_INT:
+		return d.readInt32(TAG_READ)
+
+	case BC_DOUBLE_ZERO:
+		return float64(0), nil
+
+	case BC_DOUBLE_ONE:
+		return float64(1), nil
+
+	case BC_DOUBLE_BYTE:
+		tag, _ = d.readByte()
+		return float64(tag), nil
+
+	case BC_DOUBLE_SHORT:
+		if _, err = io.ReadFull(d.reader, buf[:2]); err != nil {
+			return nil, newCodecError("short integer", err)
+		}
+
+		return float64(int(buf[0])*256 + int(buf[1])), nil
+
+	case BC_DOUBLE_MILL:
+		i, _ := d.readInt32(TAG_READ)
+		return float64(i.(int32)), nil
+
+	case BC_DOUBLE:
+		if _, err = io.ReadFull(d.reader, buf[:8]); err != nil {
+			return nil, newCodecError("short integer", err)
+		}
+
+		bits := binary.BigEndian.Uint64(buf)
+		datum := math.Float64frombits(bits)
+		return datum, nil
+	}
+
+	return nil, newCodecError("parse double wrong tag:" + fmt.Sprintf("%d-%#x", int(tag), tag))
+}
+
+func (d *Decoder) getStrLen(tag byte) (int32, error) {
+	var (
+		err    error
+		buf    [2]byte
+		length int32
+	)
+
+	switch {
+	case tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX:
+		return int32(tag - 0x00), nil
+
+	case tag >= 0x30 && tag <= 0x33:
+		_, err = io.ReadFull(d.reader, buf[:1])
+		if err != nil {
+			return -1, newCodecError("byte4 integer", err)
+		}
+
+		length = int32(tag-0x30)<<8 + int32(buf[0])
+		return length, nil
+
+	case tag == BC_STRING_CHUNK || tag == BC_STRING:
+		_, err = io.ReadFull(d.reader, buf[:2])
+		if err != nil {
+			return -1, newCodecError("byte5 integer", err)
+		}
+		length = int32(buf[0])<<8 + int32(buf[1])
+		return length, nil
+
+	default:
+		return -1, newCodecError("getStrLen")
+	}
+}
+
+func (d *Decoder) readString(flag int32) (interface{}, error) {
+	var (
+		err    error
+		tag    byte
+		length int32
+		last   bool
+	)
+
+	if flag != TAG_READ {
+		tag = byte(flag)
+	} else {
+		tag, _ = d.readByte()
+	}
+
+	last = true
+	if (tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
+		(tag >= 0x30 && tag <= 0x33) ||
+		(tag == BC_STRING_CHUNK ||
+			tag == BC_STRING) {
+
+		//fmt.Println("inside ", tag)
+		if tag == BC_STRING_CHUNK {
+			last = false
+		} else {
+			last = true
+		}
+
+		l, err := d.getStrLen(tag)
+		if err != nil {
+			return nil, newCodecError("getStrLen", err)
+		}
+		length = l
+		runeDate := make([]rune, length)
+		for i := 0; ; {
+			if int32(i) == length {
+				if last {
+					//fmt.Println("last ", last, "i", i, "length", length)
+					return string(runeDate), nil
+				}
+
+				b, _ := d.readByte()
+				switch {
+				case (tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
+					(tag >= 0x30 && tag <= 0x33) ||
+					(tag == BC_STRING_CHUNK ||
+						tag == BC_STRING):
+
+					if b == BC_STRING_CHUNK {
+						last = false
+					} else {
+						last = true
+					}
+
+					l, err := d.getStrLen(b)
+					if err != nil {
+						return nil, newCodecError("getStrLen", err)
+					}
+					length += l
+					bs := make([]rune, length)
+					copy(bs, runeDate)
+					runeDate = bs
+
+				default:
+					return nil, newCodecError("tag error ", err)
+				}
+
+			} else {
+				runeOne, _, err := getRune(d.reader)
+				runeDate[i] = runeOne
+				if err != nil {
+					return nil, newCodecError("byte2 integer", err)
+				}
+				i++
+			}
+		}
+
+		return string(runeDate), nil
+	} else {
+		fmt.Println(tag, length, last)
+		return nil, newCodecError("byte3 integer")
+	}
+
 }

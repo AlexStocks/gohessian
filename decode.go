@@ -344,6 +344,7 @@ func (this *Decoder) Decode() (interface{}, error) {
 		if l != 4 {
 			return nil, ErrNotEnoughBuf
 		}
+
 		l = int(UnpackInt32(s)) // ref index
 
 		if len(this.refs) <= l {

@@ -15,7 +15,7 @@ import (
 	"sync"
 )
 
-// Pls attention that Every field name should be upper case. Otherwise the app may be panic.
+// Pls attention that Every field name should be upper case. Otherwise the app may panic.
 type POJO interface {
 	JavaClassName() string // 获取对应的java classs的package name
 }
@@ -72,8 +72,8 @@ func RegisterPOJO(o POJO) int {
 	var (
 		ok bool
 		b  []byte
-		i  int32
-		n  int32
+		i  int
+		n  int
 		f  string
 		l  []string
 		t  structInfo
@@ -91,8 +91,8 @@ func RegisterPOJO(o POJO) int {
 		b = encBT(b, BC_OBJECT_DEF)
 		b = encString(t.javaName, b)
 		l = l[:0]
-		n = int32(t.typ.NumField())
-		b = encInt32(n, b)
+		n = t.typ.NumField()
+		b = encInt32(int32(n), b)
 		for i = 0; i < n; i++ {
 			f = strings.ToLower(t.typ.Field(i).Name)
 			l = append(l, f)
@@ -126,20 +126,44 @@ func checkPOJORegistry(typeName string) (int, bool) {
 	return s.index, ok
 }
 
+// get go struct name by @idx
+func getGoNameByIndex(idx int) (string, error) {
+	var (
+		cd   classDef
+		name string
+	)
+
+	pojoRegistry.RLock()
+	if idx >= len(pojoRegistry.clsDefList) {
+		return name, fmt.Errorf("illegal classDef index:%d", idx)
+	}
+	cd = pojoRegistry.clsDefList[idx]
+	name = pojoRegistry.j2g[cd.javaName]
+	pojoRegistry.RUnlock()
+
+	return name, nil
+}
+
 // Create a new instance whose go struct name is @t.
 // the return value is nil if @o has been registered.
 func createInstance(typeName string) interface{} {
 	var (
-		ok  bool
-		typ reflect.Type
+		ok bool
+		s  structInfo
 	)
 
 	pojoRegistry.RLock()
-	typ, ok = pojoRegistry.registry[typeName]
+	s, ok = pojoRegistry.registry[typeName]
 	pojoRegistry.RUnlock()
 	if !ok {
 		return nil
 	}
 
-	return reflect.New(typ).Interface()
+	return reflect.New(s.typ).Interface()
+}
+
+func appendClsDef(cd classDef) {
+	pojoRegistry.Lock()
+	pojoRegistry.clsDefList = append(pojoRegistry.clsDefList, cd)
+	pojoRegistry.Unlock()
 }

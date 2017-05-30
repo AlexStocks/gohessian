@@ -26,19 +26,19 @@ import (
 // interface{} 的别名
 type Any interface{}
 
-/*
-nil bool int8 int32 int64 float64 time.Time
-string []byte []interface{} map[interface{}]interface{}
-array object struct
-*/
+// nil bool int8 int32 int64 float64 time.Time
+// string []byte []interface{} map[interface{}]interface{}
+// array object struct
 
 const (
-	CHUNK_SIZE    = 0x8000
 	ENCODER_DEBUG = false
 )
 
 // If @v can not be encoded, the return value is nil. At present only struct may can not be encoded.
 func Encode(v interface{}, b []byte) []byte {
+	if v == nil {
+		return encNull(b)
+	}
 	switch v.(type) {
 	case nil:
 		return encNull(b)
@@ -62,7 +62,7 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encInt64(v.(int64), b)
 
 	case time.Time:
-		b = encDate(v.(time.Time), b)
+		b = encDateInMs(v.(time.Time), b)
 
 	case float64:
 		b = encFloat(v.(float64), b)
@@ -74,7 +74,7 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encBinary(v.([]byte), b)
 
 	case map[Any]Any:
-		b = encMap(v.(map[Any]Any), b)
+		b = encUntypedMap(v.(map[Any]Any), b)
 
 	default:
 		t := reflect.TypeOf(v)
@@ -85,14 +85,18 @@ func Encode(v interface{}, b []byte) []byte {
 		}
 		switch t.Kind() {
 		case reflect.Struct:
-			b = encStruct(v, b)
+			if p, ok := v.(POJO); ok {
+				b = encStruct(p, b)
+			} else {
+				log.Warn("struct type not Support! %s is not a instance of POJO", t.Kind().String())
+				panic("unknow struct type, not instance of POJO")
+			}
 		case reflect.Slice, reflect.Array:
 			b = encUntypedList(v, b)
 		case reflect.Map: // 进入这个case，就说明map可能是map[string]int这种类型
-			// b = encMap(v, b)
-			b = encMapByReflect(v, b)
+			b = encMap(v, b)
 		default:
-			log.Debug("type not Support! %s", t.Kind().String())
+			log.Warn("type not Support! %s", t.Kind().String())
 			panic("unknow type")
 		}
 	}
@@ -112,30 +116,38 @@ func encBT(b []byte, t ...byte) []byte {
 	return append(b, t...)
 }
 
-// null
+/////////////////////////////////////////
+// Null
+/////////////////////////////////////////
 func encNull(b []byte) []byte {
 	return append(b, 'N')
 }
 
-/*
-boolean ::= T
-        ::= F
-*/
+/////////////////////////////////////////
+// Bool
+/////////////////////////////////////////
+
+// # boolean true/false
+// ::= 'T'
+// ::= 'F'
 func encBool(v bool, b []byte) []byte {
-	var c byte = 'F'
+	var c byte = BC_FALSE
 	if v == true {
-		c = 'T'
+		c = BC_TRUE
 	}
 
 	return append(b, c)
 }
 
-/*
-int ::= 'I' b3 b2 b1 b0
-    ::= [x80-xbf]
-    ::= [xc0-xcf] b0
-    ::= [xd0-xd7] b1 b0
-*/
+/////////////////////////////////////////
+// Int32
+/////////////////////////////////////////
+
+// # 32-bit signed integer
+// ::= 'I' b3 b2 b1 b0
+// ::= [x80-xbf]             # -x10 to x3f
+// ::= [xc0-xcf] b0          # -x800 to x7ff
+// ::= [xd0-xd7] b1 b0       # -x40000 to x3ffff
 func encInt32(v int32, b []byte) []byte {
 	if int32(INT_DIRECT_MIN) <= v && v <= int32(INT_DIRECT_MAX) {
 		return encBT(b, byte(v+int32(BC_INT_ZERO)))
@@ -148,13 +160,16 @@ func encInt32(v int32, b []byte) []byte {
 	return encBT(b, byte('I'), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
-/*
-long ::= L b7 b6 b5 b4 b3 b2 b1 b0
-     ::= [xd8-xef]
-     ::= [xf0-xff] b0
-     ::= [x38-x3f] b1 b0
-     ::= x4c b3 b2 b1 b0
-*/
+/////////////////////////////////////////
+// Int64
+/////////////////////////////////////////
+
+// # 64-bit signed long integer
+// ::= 'L' b7 b6 b5 b4 b3 b2 b1 b0
+// ::= [xd8-xef]             # -x08 to x0f
+// ::= [xf0-xff] b0          # -x800 to x7ff
+// ::= [x38-x3f] b1 b0       # -x40000 to x3ffff
+// ::= x59 b3 b2 b1 b0       # 32-bit integer cast to long
 func encInt64(v int64, b []byte) []byte {
 	if int64(LONG_DIRECT_MIN) <= v && v <= int64(LONG_DIRECT_MAX) {
 		return encBT(b, byte(v-int64(BC_LONG_ZERO)))
@@ -169,21 +184,34 @@ func encInt64(v int64, b []byte) []byte {
 	return encBT(b, 'L', byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
-// date
-func encDate(v time.Time, b []byte) []byte {
-	b = append(b, 'd')
-	// return PackInt64(v.UnixNano()/1e6, b)
+/////////////////////////////////////////
+// Date
+/////////////////////////////////////////
+
+// # time in UTC encoded as 64-bit long milliseconds since epoch
+// ::= x4a b7 b6 b5 b4 b3 b2 b1 b0
+// ::= x4b b3 b2 b1 b0       # minutes since epoch
+func encDateInMs(v time.Time, b []byte) []byte {
+	b = append(b, BC_DATE)
 	return append(b, PackInt64(v.UnixNano()/1e6)...)
 }
 
-/*
-double ::= D b7 b6 b5 b4 b3 b2 b1 b0
-       ::= x5b
-       ::= x5c
-       ::= x5d b0
-       ::= x5e b1 b0
-       ::= x5f b3 b2 b1 b0
-*/
+func encDateInMimute(v time.Time, b []byte) []byte {
+	b = append(b, BC_DATE_MINUTE)
+	return append(b, PackInt32(int32(v.UnixNano()/60e9))...)
+}
+
+/////////////////////////////////////////
+// Double
+/////////////////////////////////////////
+
+// # 64-bit IEEE double
+// ::= 'D' b7 b6 b5 b4 b3 b2 b1 b0
+// ::= x5b                   # 0.0
+// ::= x5c                   # 1.0
+// ::= x5d b0                # byte cast to double (-128.0 to 127.0)
+// ::= x5e b1 b0             # short cast to double
+// ::= x5f b3 b2 b1 b0       # 32-bit float cast to double
 func encFloat(v float64, b []byte) []byte {
 	fv := float64(int64(v))
 	if fv == v {
@@ -209,12 +237,15 @@ END:
 		byte(bits>>32), byte(bits>>24), byte(bits>>16), byte(bits>>8), byte(bits))
 }
 
-/*
-string ::= x52 b1 b0 <utf8-data> string
-       ::= S b1 b0 <utf8-data>
-       ::= [x00-x1f] <utf8-data>
-       ::= [x30-x33] b0 <utf8-data>
-*/
+/////////////////////////////////////////
+// String
+/////////////////////////////////////////
+
+// # UTF-8 encoded character string split into 64k chunks
+// ::= x52 b1 b0 <utf8-data> string  # non-final chunk
+// ::= 'S' b1 b0 <utf8-data>         # string of length 0-65535
+// ::= [x00-x1f] <utf8-data>         # string of length 0-31
+// ::= [x30-x34] <utf8-data>         # string of length 0-1023
 func encString(v string, b []byte) []byte {
 	var (
 		vBuf = *bytes.NewBufferString(v)
@@ -240,16 +271,17 @@ func encString(v string, b []byte) []byte {
 			break
 		}
 		if vLen > CHUNK_SIZE {
-			// b = append(b, 's')
-			b = encBT(b, BC_STRING_CHUNK, PackUint16(uint16(CHUNK_SIZE))...)
+			b = encBT(b, BC_STRING_CHUNK)
+			b = encBT(b, PackUint16(uint16(CHUNK_SIZE))...)
 			vChunk(CHUNK_SIZE)
 		} else {
 			if vLen <= int(STRING_DIRECT_MAX) {
-				encBT(b, byte(vLen+int(BC_STRING_DIRECT)))
+				b = encBT(b, byte(vLen+int(BC_STRING_DIRECT)))
 			} else if vLen <= int(STRING_SHORT_MAX) {
-				encBT(b, byte((vLen>>8)+int(BC_STRING_SHORT)), byte(vLen))
+				b = encBT(b, byte((vLen>>8)+int(BC_STRING_SHORT)), byte(vLen))
 			} else {
-				encBT(b, BC_STRING, PackUint16(uint16(vLen))...)
+				b = encBT(b, BC_STRING)
+				b = encBT(b, PackUint16(uint16(vLen))...)
 			}
 			vChunk(vLen)
 		}
@@ -258,11 +290,15 @@ func encString(v string, b []byte) []byte {
 	return b
 }
 
-/*
-binary ::= b b1 b0 <binary-data> binary
-       ::= B b1 b0 <binary-data>
-       ::= [x20-x2f] <binary-data>
-*/
+/////////////////////////////////////////
+// Binary, []byte
+/////////////////////////////////////////
+
+// # 8-bit binary data split into 64k chunks
+// ::= x41 b1 b0 <binary-data> binary # non-final chunk
+// ::= 'B' b1 b0 <binary-data>        # final chunk
+// ::= [x20-x2f] <binary-data>        # binary data of length 0-15
+// ::= [x34-x37] <binary-data>        # binary data of length 0-1023
 func encBinary(v []byte, b []byte) []byte {
 	var (
 		length  uint16
@@ -296,14 +332,17 @@ func encBinary(v []byte, b []byte) []byte {
 	return b
 }
 
-/*
-list ::= x55 type value* 'Z'   # variable-length list
-     ::= 'V' type int value*   # fixed-length list
-     ::= x57 value* 'Z'        # variable-length untyped list
-     ::= x58 int value*        # fixed-length untyped list
-     ::= [x70-77] type value*  # fixed-length typed list
-     ::= [x78-7f] value*       # fixed-length untyped list
-*/
+/////////////////////////////////////////
+// List
+/////////////////////////////////////////
+
+// # list/vector
+// ::= x55 type value* 'Z'   # variable-length list
+// ::= 'V' type int value*   # fixed-length list
+// ::= x57 value* 'Z'        # variable-length untyped list
+// ::= x58 int value*        # fixed-length untyped list
+// ::= [x70-77] type value*  # fixed-length typed list
+// ::= [x78-7f] value*       # fixed-length untyped list
 func encUntypedList(v interface{}, b []byte) []byte {
 	reflectValue := reflect.ValueOf(v)
 	b = encBT(b, BC_LIST_FIXED_UNTYPED) // x58
@@ -311,28 +350,29 @@ func encUntypedList(v interface{}, b []byte) []byte {
 	for i := 0; i < reflectValue.Len(); i++ {
 		b = Encode(reflectValue.Index(i).Interface(), b)
 	}
-	//bugfix: no need for BC_END
-	//e.writeBT(BC_END)
 
 	return b
 }
 
-/*
-map        ::= M type (value value)* Z
-*/
-func encMap(m map[Any]Any, b []byte) []byte {
+/////////////////////////////////////////
+// map/object
+/////////////////////////////////////////
+
+// ::= 'M' type (value value)* 'Z'  # key, value map pairs
+// ::= 'H' (value value)* 'Z'       # untyped key, value
+func encUntypedMap(m map[Any]Any, b []byte) []byte {
 	if len(m) == 0 {
 		return b
 	}
 
-	b = encBT(b, BC_MAP_UNTYPED) // BC_MAP
+	b = encBT(b, BC_MAP_UNTYPED)
 
 	for k, v := range m {
 		b = Encode(k, b)
 		b = Encode(v, b)
 	}
 
-	b = encBT(b, BC_END) // 'z'
+	b = encBT(b, BC_END) // 'Z'
 
 	return b
 }
@@ -362,7 +402,7 @@ func buildMapKey(key reflect.Value, typ reflect.Type) interface{} {
 	return newCodecError("unsuport key kind " + typ.Kind().String())
 }
 
-func encMapByReflect(m interface{}, b []byte) []byte {
+func encMap(m interface{}, b []byte) []byte {
 	var (
 		buf   []byte // 如果map encode失败，也不会影响b中已有的内容
 		typ   reflect.Type
@@ -386,78 +426,79 @@ func encMapByReflect(m interface{}, b []byte) []byte {
 		buf = Encode(k, buf)
 		buf = Encode(value.MapIndex(keys[i]).Interface(), buf)
 	}
-	// buf = append(buf, 'z')
 	buf = append(buf, BC_END)
 
 	return append(b, buf...)
 }
 
-/*
-class-def  ::= 'C' string int string* //  mandatory type string, the number of fields, and the field names.
-object     ::= 'O' int value* // class-def id, value list
-           ::= [x60-x6f] value* // class-def id, value list
+/////////////////////////////////////////
+// map/object
+/////////////////////////////////////////
 
-Object serialization
-
-class Car {
-  String color;
-  String model;
-}
-
-out.writeObject(new Car("red", "corvette"));
-out.writeObject(new Car("green", "civic"));
-
----
-
-C                        # object definition (#0)
-  x0b example.Car        # type is example.Car
-  x92                    # two fields
-  x05 color              # color field name
-  x05 model              # model field name
-
-O                        # object def (long form)
-  x90                    # object definition #0
-  x03 red                # color field value
-  x08 corvette           # model field value
-
-x60                      # object def #0 (short form)
-  x05 green              # color field value
-  x05 civic              # model field value
-
-
-
-
-
-enum Color {
-  RED,
-  GREEN,
-  BLUE,
-}
-
-out.writeObject(Color.RED);
-out.writeObject(Color.GREEN);
-out.writeObject(Color.BLUE);
-out.writeObject(Color.GREEN);
-
----
-
-C                         # class definition #0
-  x0b example.Color       # type is example.Color
-  x91                     # one field
-  x04 name                # enumeration field is "name"
-
-x60                       # object #0 (class def #0)
-  x03 RED                 # RED value
-
-x60                       # object #1 (class def #0)
-  x90                     # object definition ref #0
-  x05 GREEN               # GREEN value
-
-x60                       # object #2 (class def #0)
-  x04 BLUE                # BLUE value
-
-x51 x91                   # object ref #1, i.e. Color.GREEN
-*/
+//class-def  ::= 'C' string int string* //  mandatory type string, the number of fields, and the field names.
+//object     ::= 'O' int value* // class-def id, value list
+//           ::= [x60-x6f] value* // class-def id, value list
+//
+//Object serialization
+//
+//class Car {
+//  String color;
+//  String model;
+//}
+//
+//out.writeObject(new Car("red", "corvette"));
+//out.writeObject(new Car("green", "civic"));
+//
+//---
+//
+//C                        # object definition (#0)
+//  x0b example.Car        # type is example.Car
+//  x92                    # two fields
+//  x05 color              # color field name
+//  x05 model              # model field name
+//
+//O                        # object def (long form)
+//  x90                    # object definition #0
+//  x03 red                # color field value
+//  x08 corvette           # model field value
+//
+//x60                      # object def #0 (short form)
+//  x05 green              # color field value
+//  x05 civic              # model field value
+//
+//
+//
+//
+//
+//enum Color {
+//  RED,
+//  GREEN,
+//  BLUE,
+//}
+//
+//out.writeObject(Color.RED);
+//out.writeObject(Color.GREEN);
+//out.writeObject(Color.BLUE);
+//out.writeObject(Color.GREEN);
+//
+//---
+//
+//C                         # class definition #0
+//  x0b example.Color       # type is example.Color
+//  x91                     # one field
+//  x04 name                # enumeration field is "name"
+//
+//x60                       # object #0 (class def #0)
+//  x03 RED                 # RED value
+//
+//x60                       # object #1 (class def #0)
+//  x90                     # object definition ref #0
+//  x05 GREEN               # GREEN value
+//
+//x60                       # object #2 (class def #0)
+//  x04 BLUE                # BLUE value
+//
+//x51 x91                   # object ref #1, i.e. Color.GREEN
 func encStruct(v POJO, b []byte) []byte {
 	vv := reflect.ValueOf(v)
 
@@ -472,7 +513,7 @@ func encStruct(v POJO, b []byte) []byte {
 		b = encBT(b, byte(l)+BC_OBJECT_DIRECT)
 	} else {
 		b = encBT(b, BC_OBJECT)
-		b = encInt32(b, int32(l))
+		b = encInt32(int32(l), b)
 	}
 	num := vv.NumField()
 	for i := 0; i < num; i++ {

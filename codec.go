@@ -11,6 +11,7 @@ package hessian
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/sqs/goreturns/returns"
 	"math"
 	"strings"
 )
@@ -106,18 +107,14 @@ func SprintHex(b []byte) (rs string) {
 	return
 }
 
-// ErrDecoder is returned when the encoder encounters an error.
-type ErrDecoder struct {
-	Message string
-	Err     error
-}
-
-func newCodecError(dataType string, a ...interface{}) *ErrDecoder {
-	var err error
-	var format, message string
-	var ok bool
+func newCodecError(dataType string, a ...interface{}) error {
+	var (
+		err             error
+		format, message string
+		ok              bool
+	)
 	if len(a) == 0 {
-		return &ErrDecoder{dataType + ": no reason given", nil}
+		return fmt.Errorf(dataType + ": no reason given")
 	}
 	// if last item is error: save it
 	if err, ok = a[len(a)-1].(error); ok {
@@ -133,5 +130,6 @@ func newCodecError(dataType string, a ...interface{}) *ErrDecoder {
 	if message != "" {
 		message = ": " + message
 	}
-	return &ErrDecoder{dataType + message, err}
+
+	return fmt.Errorf("%s: %v", dataType+message, err)
 }

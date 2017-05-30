@@ -68,6 +68,8 @@ func typeof(v interface{}) string {
 }
 
 // the return value is -1 if @o has been registered.
+// # definition for an object (compact map)
+// class-def  ::= 'C' string int string*
 func RegisterPOJO(o POJO) int {
 	var (
 		ok bool

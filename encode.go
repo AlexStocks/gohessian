@@ -466,10 +466,6 @@ func encMap(m interface{}, b []byte) []byte {
 //  x05 green              # color field value
 //  x05 civic              # model field value
 //
-//
-//
-//
-//
 //enum Color {
 //  RED,
 //  GREEN,

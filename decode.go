@@ -211,7 +211,7 @@ func (d *Decoder) decInt32(flag int32) (int32, error) {
 		tag, _ = d.readByte()
 	}
 
-	switch tag {
+	switch {
 	//direct integer
 
 	case tag >= 0x80 && tag <= 0xbf:
@@ -219,19 +219,19 @@ func (d *Decoder) decInt32(flag int32) (int32, error) {
 
 	case tag >= 0xc0 && tag <= 0xcf:
 		if _, err = io.ReadFull(d.reader, buf[:1]); err != nil {
-			return nil, newCodecError("short integer", err)
+			return 0, newCodecError("short integer", err)
 		}
 		return int32(tag-BC_INT_BYTE_ZERO)<<8 + int32(buf[0]), nil
 
 	case tag >= 0xd0 && tag <= 0xd7:
 		if _, err = io.ReadFull(d.reader, buf[:2]); err != nil {
-			return nil, newCodecError("short integer", err)
+			return 0, newCodecError("short integer", err)
 		}
 		return int32(tag-BC_INT_SHORT_ZERO)<<16 + int32(buf[1])<<8 + int32(buf[0]), nil
 
 	case tag == BC_INT:
 		if _, err := io.ReadFull(d.reader, buf[:4]); err != nil {
-			return nil, newCodecError("parse int", err)
+			return 0, newCodecError("parse int", err)
 		}
 		return int32(buf[0])<<24 + int32(buf[1])<<16 + int32(buf[2])<<8 + int32(buf[3]), nil
 
@@ -269,26 +269,26 @@ func (d *Decoder) decInt64(flag int32) (int64, error) {
 
 	case tag >= 0xf4 && tag <= 0xff:
 		if _, err = io.ReadFull(d.reader, buf[:1]); err != nil {
-			return nil, newCodecError("short integer", err)
+			return 0, newCodecError("short integer", err)
 		}
 		return int64(tag-BC_LONG_BYTE_ZERO)<<8 + int64(buf[0]), nil
 
 	case tag >= 0x38 && tag <= 0x3f:
 		if _, err := io.ReadFull(d.reader, buf[:2]); err != nil {
-			return nil, newCodecError("short integer", err)
+			return 0, newCodecError("short integer", err)
 		}
 
 		return int64(tag-BC_LONG_SHORT_ZERO)<<16 + int64(buf[1])<<8 + int64(buf[0]), nil
 
 	case tag == BC_LONG:
 		if _, err := io.ReadFull(d.reader, buf[:8]); err != nil {
-			return nil, newCodecError("parse long", err)
+			return 0, newCodecError("parse long", err)
 		}
 		return int64(buf[0])<<56 + int64(buf[1])<<48 + int64(buf[2])<<40 + int64(buf[3])<<32 +
 			int64(buf[4])<<24 + int64(buf[5])<<16 + int64(buf[6])<<8 + int64(buf[7]), nil
 
 	default:
-		return nil, newCodecError("long wrong tag " + fmt.Sprintf("%d-%#x", int(tag), tag))
+		return 0, newCodecError("long wrong tag " + fmt.Sprintf("%d-%#x", int(tag), tag))
 	}
 }
 
@@ -307,6 +307,7 @@ func (d *Decoder) decDate(flag int32) (time.Time, error) {
 		buf [8]byte
 		s   []byte
 		i64 int64
+		t   time.Time
 	)
 
 	if flag != TAG_READ {
@@ -320,10 +321,10 @@ func (d *Decoder) decDate(flag int32) (time.Time, error) {
 		s = buf[:8]
 		l, err = d.next(s)
 		if err != nil {
-			return nil, err
+			return t, err
 		}
 		if l != 8 {
-			return nil, ErrNotEnoughBuf
+			return t, ErrNotEnoughBuf
 		}
 		i64 = UnpackInt64(s)
 		// return time.Unix(i64/1000, i64%1000*10e5), nil
@@ -333,15 +334,16 @@ func (d *Decoder) decDate(flag int32) (time.Time, error) {
 		s = buf[:4]
 		l, err = d.next(s)
 		if err != nil {
-			return nil, err
+			return t, err
 		}
 		if l != 4 {
-			return nil, ErrNotEnoughBuf
+			return t, ErrNotEnoughBuf
 		}
 		i64 = int64(UnpackInt32(s))
 		return time.Unix(i64*60, 0), nil
+
 	default:
-		return nil, fmt.Errorf("Invalid type: %v", tag)
+		return t, fmt.Errorf("Invalid type: %v", tag)
 	}
 }
 
@@ -456,6 +458,11 @@ func getRune(reader io.Reader) (rune, int, error) {
 
 	typ = reflect.TypeOf(reader.(interface{}))
 
+	if (typ == reflect.TypeOf(&bufio.Reader{})) {
+		byteReader := reader.(interface{}).(*bufio.Reader)
+		return byteReader.ReadRune()
+	}
+
 	if (typ == reflect.TypeOf(&bytes.Buffer{})) {
 		byteReader := reader.(interface{}).(*bytes.Buffer)
 		return byteReader.ReadRune()
@@ -474,6 +481,8 @@ func (d *Decoder) decString(flag int32) (string, error) {
 		tag    byte
 		length int32
 		last   bool
+		s      string
+		r      rune
 	)
 
 	if flag != TAG_READ {
@@ -495,7 +504,7 @@ func (d *Decoder) decString(flag int32) (string, error) {
 
 		l, err := d.getStrLen(tag)
 		if err != nil {
-			return nil, newCodecError("decString-getStrLen", err)
+			return s, newCodecError("decString-getStrLen", err)
 		}
 		length = l
 		runeDate := make([]rune, length)
@@ -519,7 +528,7 @@ func (d *Decoder) decString(flag int32) (string, error) {
 
 					l, err := d.getStrLen(b)
 					if err != nil {
-						return nil, newCodecError("getStrLen", err)
+						return s, newCodecError("decString-getStrLen", err)
 					}
 					length += l
 					bs := make([]rune, length)
@@ -527,23 +536,22 @@ func (d *Decoder) decString(flag int32) (string, error) {
 					runeDate = bs
 
 				default:
-					return nil, newCodecError("tag error ", err)
+					return s, newCodecError("tag error ", err)
 				}
 
 			} else {
-				runeOne, _, err := getRune(d.reader)
+				r, _, err = d.reader.ReadRune()
 				if err != nil {
-					return nil, newCodecError("byte2 integer", err)
+					return s, newCodecError("decString-ReadRune", err)
 				}
-				runeDate[i] = runeOne
+				runeDate[i] = r
 				i++
 			}
 		}
 
 		return string(runeDate), nil
 	} else {
-		fmt.Println(tag, length, last)
-		return nil, newCodecError("byte3 integer")
+		return s, newCodecError("byte3 integer")
 	}
 }
 

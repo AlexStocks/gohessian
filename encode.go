@@ -19,6 +19,7 @@ import (
 )
 
 import (
+	"fmt"
 	"github.com/AlexStocks/goext/strings"
 	log "github.com/AlexStocks/log4go"
 )
@@ -47,6 +48,7 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encBool(v.(bool), b)
 
 	case int:
+		fmt.Println("type int")
 		// if v.(int) >= -2147483648 && v.(int) <= 2147483647 {
 		// 	b = encInt32(int32(v.(int)), b)
 		// } else {
@@ -56,6 +58,7 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encInt64(int64(v.(int)), b)
 
 	case int32:
+		fmt.Println("type int32")
 		b = encInt32(v.(int32), b)
 
 	case int64:
@@ -313,8 +316,10 @@ func encBinary(v []byte, b []byte) []byte {
 	for vLength > 0 {
 		// if vBuf.Len() > CHUNK_SIZE {
 		if vLength > CHUNK_SIZE {
-			b = encBT(b, byte(BC_BINARY_CHUNK), byte(vLength>>8), byte(vLength))
+			length = CHUNK_SIZE
+			b = encBT(b, byte(BC_BINARY_CHUNK), byte(length>>8), byte(length))
 		} else {
+			length = uint16(vLength)
 			if vLength <= int(BINARY_DIRECT_MAX) {
 				b = encBT(b, byte(int(BC_BINARY_DIRECT)+vLength))
 			} else if vLength <= int(BINARY_SHORT_MAX) {

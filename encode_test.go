@@ -10,6 +10,7 @@ package hessian
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -28,6 +29,7 @@ func TestEncNull(t *testing.T) {
 	if b == nil {
 		t.Fail()
 	}
+	t.Logf("nil enc result:%s\n", string(b))
 }
 
 func TestEncBool(t *testing.T) {
@@ -53,10 +55,16 @@ func TestEncInt32(t *testing.T) {
 	if len(b) == 0 {
 		t.Fail()
 	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(20161024) = %v, %v\n", iRes, err)
 	b = Encode(int32(20161024), b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
+	iDecoder = NewDecoder(b)
+	iRes, err = iDecoder.Decode()
+	t.Logf("encode(int32(20161024)) = %v, %v\n", iRes, err)
 }
 
 func TestEncInt64(t *testing.T) {
@@ -65,45 +73,105 @@ func TestEncInt64(t *testing.T) {
 	if len(b) == 0 {
 		t.Fail()
 	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(int64(20161024)) = %v, %v\n", iRes, err)
 }
 
 func TestEncDate(t *testing.T) {
 	var b = make([]byte, 8)
-	tz, _ := time.Parse("2006-01-02 15:04:05", "2014-02-09 06:15:23")
+	ts := "2014-02-09 06:15:23"
+	tz, _ := time.Parse("2006-01-02 15:04:05", ts)
 	b = Encode(tz, b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
-	want := []byte{0x64, 0x00, 0x00, 0x01, 0x44, 0x15, 0x49, 0x34, 0x78}
-	assert(want, b, t)
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(%s, %s) = %v, %v\n", ts, tz.Local(), iRes, err)
 }
 
 func TestEncDouble(t *testing.T) {
-	var b = make([]byte, 8)
-	b = Encode(2016.1024, b[:0])
+	b := make([]byte, 8)
+	v := 2016.1024
+	b = Encode(v, b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(%v) = %v, %v\n", v, iRes, err)
 }
 
 func TestEncString(t *testing.T) {
 	var b = make([]byte, 64)
-	b = Encode("hello", b[:0])
+	v := "hello"
+	b = Encode(v, b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(%v) = %v, %v\n", v, iRes, err)
+}
+
+func TestEncShortRune(t *testing.T) {
+	var b = make([]byte, 64)
+	v := "我化尘埃飞扬，追寻赤裸逆翔"
+	b = Encode(v, b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(%v) = %v, %v\n", v, iRes, err)
+}
+
+func TestEncRune(t *testing.T) {
+	var b = make([]byte, 64)
+	v := "我化尘埃飞扬，追寻赤裸逆翔, 奔去七月刑场，时间烧灼滚烫, 回忆撕毁臆想，路上行走匆忙, 难能可贵世上，散播留香磁场, 我欲乘风破浪，踏遍黄沙海洋, 与其误会一场，也要不负勇往, 我愿你是个谎，从未出现南墙, 笑是神的伪装，笑是强忍的伤, 我想你就站在，站在大漠边疆, 我化尘埃飞扬，追寻赤裸逆翔," +
+		" 奔去七月刑场，时间烧灼滚烫, 回忆撕毁臆想，路上行走匆忙, 难能可贵世上，散播留香磁场, 我欲乘风破浪，踏遍黄沙海洋, 与其误会一场，也要不负勇往, 我愿你是个谎，从未出现南墙, 笑是神的伪装，笑是强忍的伤, 我想你就站在，站在大漠边疆."
+	v = v + v + v + v + v
+	v = v + v + v + v + v
+	v = v + v + v + v + v
+	v = v + v + v + v + v
+	v = v + v + v + v + v
+	fmt.Printf("vlen:%d\n", len(v))
+	b = Encode(v, b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	// t.Logf("decode(%v) = %v, %v\n", v, iRes, err)
+	assert([]byte(iRes.(string)), []byte(v), t)
 }
 
 func TestEncBinary(t *testing.T) {
-	var b = make([]byte, 64)
-	b = Encode([]byte{}, b[:0])
-	want := []byte{0x42, 0x00, 0x00}
-	assert(b, want, t)
-
-	raw := []byte{10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 'a', 'b', 'c', 'd'}
+	b := make([]byte, 64)
+	raw := []byte{}
 	b = Encode(raw, b[:0])
-	want = []byte{0x42, 0x00, 0x0e, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x61, 0x62, 0x63, 0x64}
-	assert(b, want, t)
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	t.Logf("decode(%v) = %v, %v\n", raw, iRes, err)
+
+	b = make([]byte, 64)
+	raw = []byte{10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 'a', 'b', 'c', 'd'}
+	b = Encode(raw, b[:0])
+	t.Logf("encode(%v) = %v\n", raw, b)
+	iDecoder = NewDecoder(b)
+	iRes, err = iDecoder.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	t.Logf("decode(%v) = %v, %v, equal:%v\n", raw, iRes, err, bytes.Equal(raw, iRes.([]byte)))
+	assert(raw, iRes.([]byte), t)
 }
 
 func TestEncList(t *testing.T) {

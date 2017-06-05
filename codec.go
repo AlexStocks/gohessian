@@ -11,7 +11,6 @@ package hessian
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/sqs/goreturns/returns"
 	"math"
 	"strings"
 )

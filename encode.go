@@ -19,13 +19,9 @@ import (
 )
 
 import (
-	"fmt"
 	"github.com/AlexStocks/goext/strings"
 	log "github.com/AlexStocks/log4go"
 )
-
-// interface{} 的别名
-type Any interface{}
 
 // nil bool int8 int32 int64 float64 time.Time
 // string []byte []interface{} map[interface{}]interface{}
@@ -48,7 +44,6 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encBool(v.(bool), b)
 
 	case int:
-		fmt.Println("type int")
 		// if v.(int) >= -2147483648 && v.(int) <= 2147483647 {
 		// 	b = encInt32(int32(v.(int)), b)
 		// } else {
@@ -58,7 +53,6 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encInt64(int64(v.(int)), b)
 
 	case int32:
-		fmt.Println("type int32")
 		b = encInt32(v.(int32), b)
 
 	case int64:
@@ -76,8 +70,8 @@ func Encode(v interface{}, b []byte) []byte {
 	case []byte:
 		b = encBinary(v.([]byte), b)
 
-	case map[Any]Any:
-		b = encUntypedMap(v.(map[Any]Any), b)
+	case map[interface{}]interface{}:
+		b = encUntypedMap(v.(map[interface{}]interface{}), b)
 
 	default:
 		t := reflect.TypeOf(v)
@@ -365,7 +359,7 @@ func encUntypedList(v interface{}, b []byte) []byte {
 
 // ::= 'M' type (value value)* 'Z'  # key, value map pairs
 // ::= 'H' (value value)* 'Z'       # untyped key, value
-func encUntypedMap(m map[Any]Any, b []byte) []byte {
+func encUntypedMap(m map[interface{}]interface{}, b []byte) []byte {
 	if len(m) == 0 {
 		return b
 	}

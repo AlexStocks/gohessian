@@ -49,33 +49,92 @@ func TestEncBool(t *testing.T) {
 	assert(want, b, t)
 }
 
-func TestEncInt32(t *testing.T) {
+func TestEncInt32Len1B(t *testing.T) {
 	var b = make([]byte, 4)
-	b = Encode(20161024, b[:0])
+	var value int32 = 0xe6
+	// var value int32 = 0xf016
+	b = Encode(value, b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
 	iDecoder := NewDecoder(b)
 	iRes, err := iDecoder.Decode()
-	t.Logf("decode(20161024) = %v, %v\n", iRes, err)
-	b = Encode(int32(20161024), b[:0])
-	if len(b) == 0 {
-		t.Fail()
-	}
-	iDecoder = NewDecoder(b)
-	iRes, err = iDecoder.Decode()
-	t.Logf("encode(int32(20161024)) = %v, %v\n", iRes, err)
+	t.Logf("decode(%v) = %v, %v\n", value, iRes, err)
 }
 
-func TestEncInt64(t *testing.T) {
-	var b = make([]byte, 8)
-	b = Encode(int64(20161024), b[:0])
+func TestEncInt32Len2B(t *testing.T) {
+	var b = make([]byte, 4)
+	// var value int32 = 0x616
+	var value int32 = 0xf016
+	b = Encode(value, b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	t.Logf("%#v\n", b)
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(%#x) = %#x, %v\n", value, iRes, err)
+}
+
+func TestEncInt32Len4B(t *testing.T) {
+	var b = make([]byte, 4)
+	var value int32 = 0x20161024
+	b = Encode(value, b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
 	iDecoder := NewDecoder(b)
 	iRes, err := iDecoder.Decode()
-	t.Logf("decode(int64(20161024)) = %v, %v\n", iRes, err)
+	t.Logf("decode(%v) = %v, %v\n", value, iRes, err)
+}
+
+func TestEncInt64Len1B(t *testing.T) {
+	var b = make([]byte, 8)
+	var value int64 = 0xf6
+	b = Encode(int64(value), b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(int64(%#x)) = %#x, %v\n", value, iRes, err)
+}
+
+func TestEncInt64Len2B(t *testing.T) {
+	var b = make([]byte, 8)
+	var value int64 = 0x2016
+	b = Encode(int64(value), b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(int64(%#x)) = %#x, %v\n", value, iRes, err)
+}
+
+func TestEncInt64Len3B(t *testing.T) {
+	var b = make([]byte, 8)
+	var value int64 = 101910 // 0x18e16
+	// b = Encode(int64(20161024), b[:0])
+	b = Encode(int64(value), b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(int64(%#x)) = %#x, %v\n", value, iRes, err)
+}
+
+func TestEncInt64Len8B(t *testing.T) {
+	var b = make([]byte, 8)
+	var value int64 = 0x20161024114530
+	b = Encode(int64(value), b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	t.Logf("decode(int64(%#x)) = %#x, %v\n", value, iRes, err)
 }
 
 func TestEncDate(t *testing.T) {
@@ -176,16 +235,23 @@ func TestEncBinary(t *testing.T) {
 
 func TestEncList(t *testing.T) {
 	var b = make([]byte, 128)
-	list := []Any{100, 10.001, "hello", []byte{0, 2, 4, 6, 8, 10}, true, nil, false}
+	list := []interface{}{100, 10.001, "hello", []byte{0, 2, 4, 6, 8, 10}, true, nil, false}
 	b = Encode(list, b[:0])
 	if len(b) == 0 {
 		t.Fail()
 	}
+
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	t.Logf("decode(%v) = %v, %v\n", list, iRes, err)
 }
 
-func TestEncMap(t *testing.T) {
+func TestEncUntypedMap(t *testing.T) {
 	var b = make([]byte, 128)
-	var m = make(map[Any]Any)
+	var m = make(map[interface{}]interface{})
 	m["hello"] = "world"
 	m[100] = "100"
 	m[100.1010] = 101910
@@ -195,4 +261,11 @@ func TestEncMap(t *testing.T) {
 	if len(b) == 0 {
 		t.Fail()
 	}
+
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	t.Logf("decode(%v) = %v, %v\n", m, iRes, err)
 }

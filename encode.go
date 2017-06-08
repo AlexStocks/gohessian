@@ -61,6 +61,9 @@ func Encode(v interface{}, b []byte) []byte {
 	case time.Time:
 		b = encDateInMs(v.(time.Time), b)
 
+	case float32:
+		b = encFloat(float64(v.(float32)), b)
+
 	case float64:
 		b = encFloat(v.(float64), b)
 

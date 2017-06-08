@@ -269,3 +269,51 @@ func TestEncUntypedMap(t *testing.T) {
 	}
 	t.Logf("decode(%v) = %v, %v\n", m, iRes, err)
 }
+
+func TestEncTypedMap(t *testing.T) {
+	var b = make([]byte, 128)
+	var m = make(map[int]string)
+	m[0] = "hello"
+	m[1] = "golang"
+	m[2] = "world"
+	b = Encode(m, b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+
+	iDecoder := NewDecoder(b)
+	iRes, err := iDecoder.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	t.Logf("decode(%v) = %v, %v\n", m, iRes, err)
+}
+
+type WorkerInfo struct {
+	Name     string
+	Addrress string
+	Age      int
+	Salary   float32
+}
+
+func (i WorkerInfo) JavaClassName() string {
+	return "com.bdt.info.WorkerInfo"
+}
+
+func TestEncStruct(t *testing.T) {
+	var b = make([]byte, 128)
+	var w = WorkerInfo{"Trump", "W,D.C.", 72, 21000.03}
+	b = Encode(w, b[:0])
+	if len(b) == 0 {
+		t.Fail()
+	}
+
+	// iDecoder := NewDecoder(b)
+	// iRes, err := iDecoder.Decode()
+	// if err != nil {
+	// 	t.Errorf("Decode() = %v", err)
+	// }
+	// t.Logf("decode(%v) = %v, %v\n", w, iRes, err)
+
+	// reflect.DeepEqual(p, p_new)
+}

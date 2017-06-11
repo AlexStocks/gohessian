@@ -178,7 +178,8 @@ func (d *Decoder) Decode() (interface{}, error) {
 	case (t == BC_MAP) || (t == BC_MAP_UNTYPED):
 		return d.decMap(int32(t))
 
-	case (t == BC_OBJECT_DEF) || (t == BC_OBJECT):
+	case (t == BC_OBJECT_DEF) || (t == BC_OBJECT) ||
+		(BC_OBJECT_DIRECT <= t && t <= (BC_OBJECT_DIRECT+OBJECT_DIRECT_MAX)):
 		return d.decObject(int32(t))
 
 	case (t == BC_REF): // 'R': //ref, 一个整数，用以指代前面的list 或者 map
@@ -833,6 +834,9 @@ func (d *Decoder) decMapByValue(value reflect.Value) (interface{}, error) {
 				return nil, newCodecError("decMapByValue->ReadType", err)
 			}
 		}
+		if key == nil {
+			break
+		}
 		vl, err := d.Decode()
 		m.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(vl))
 	}
@@ -1049,8 +1053,9 @@ func findField(name string, typ reflect.Type) (int, error) {
 		if strings.Compare(str, name) == 0 {
 			return i, nil
 		}
-		str1 := strings.Title(name)
-		if strings.Compare(str, str1) == 0 {
+		// str1 := strings.Title(name)
+		str1 := strings.ToLower(str)
+		if strings.Compare(name, str1) == 0 {
 			return i, nil
 		}
 	}
@@ -1058,12 +1063,16 @@ func findField(name string, typ reflect.Type) (int, error) {
 }
 
 func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, error) {
+	var (
+		i int
+		j int
+	)
 	if typ.Kind() != reflect.Struct {
 		return nil, newCodecError("wrong type expect Struct but get " + typ.String())
 	}
 	vv := reflect.New(typ)
 	st := reflect.ValueOf(vv.Interface()).Elem()
-	for i := 0; i < len(cls.fieldNameList); i++ {
+	for i = 0; i < len(cls.fieldNameList); i++ {
 		fldName := cls.fieldNameList[i]
 		index, err := findField(fldName, typ)
 		if err != nil {
@@ -1086,20 +1095,19 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			}
 			fldValue.SetString(str)
 
-		case kind == reflect.Int32 || kind == reflect.Int || kind == reflect.Int16:
-			i, err := d.decInt32(TAG_READ)
+		case kind == reflect.Int32 || kind == reflect.Int16:
+			num, err := d.decInt32(TAG_READ)
 			if err != nil {
 				return nil, newCodecError("decInstance->ParseInt:"+fldName, err)
 			}
-			v := int64(i)
-			fldValue.SetInt(v)
+			fldValue.SetInt(int64(num))
 
-		case kind == reflect.Int64 || kind == reflect.Uint64:
-			i, err := d.decInt64(TAG_READ)
+		case kind == reflect.Int || kind == reflect.Int64 || kind == reflect.Uint64:
+			num, err := d.decInt64(TAG_READ)
 			if err != nil {
 				return nil, newCodecError("decInstance->decInt64:"+fldName, err)
 			}
-			fldValue.SetInt(i)
+			fldValue.SetInt(num)
 
 		case kind == reflect.Bool:
 			b, err := d.Decode()
@@ -1109,11 +1117,11 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			fldValue.SetBool(b.(bool))
 
 		case kind == reflect.Float32 || kind == reflect.Float64:
-			d, err := d.decDouble(TAG_READ)
+			num, err := d.decDouble(TAG_READ)
 			if err != nil {
 				return nil, newCodecError("decInstance->decDouble"+fldName, err)
 			}
-			fldValue.SetFloat(d.(float64))
+			fldValue.SetFloat(num.(float64))
 
 		case kind == reflect.Map:
 			d.decMapByValue(fldValue)
@@ -1123,8 +1131,8 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			v := reflect.ValueOf(m)
 			if v.Len() > 0 {
 				sl := reflect.MakeSlice(fldValue.Type(), v.Len(), v.Len())
-				for i := 0; i < v.Len(); i++ {
-					sl.Index(i).Set(reflect.ValueOf(v.Index(i).Interface()))
+				for j = 0; j < v.Len(); j++ {
+					sl.Index(j).Set(reflect.ValueOf(v.Index(j).Interface()))
 				}
 				fldValue.Set(sl)
 			}
@@ -1134,10 +1142,12 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			if err != nil {
 				return nil, newCodecError("decInstance->Decode", err)
 			}
+			if s != nil {
+				fldValue.Set(reflect.Indirect(s.(reflect.Value)))
+			}
 
-			fldValue.Set(reflect.Indirect(s.(reflect.Value)))
-		//fmt.Println("s with struct", s)
 		default:
+			return nil, fmt.Errorf("unknown struct member type:%d", kind)
 		}
 	}
 
@@ -1147,6 +1157,10 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 func (d *Decoder) decObject(flag int32) (interface{}, error) {
 	var (
 		tag byte
+		idx int32
+		err error
+		typ reflect.Type
+		cls classDef
 	)
 
 	if flag != TAG_READ {
@@ -1161,15 +1175,31 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		if err != nil {
 			return nil, newCodecError("decObject->decClassDef byte double", err)
 		}
-		clsD, _ := clsDef.(classDef)
+		cls, _ = clsDef.(classDef)
 		//add to slice
-		appendClsDef(clsD)
+		appendClsDef(cls)
 		return d.Decode()
 
 	case tag == BC_OBJECT:
-		idx, _ := d.decInt32(TAG_READ)
-		clsName, _ := getGoNameByIndex(int(idx))
-		return createInstance(clsName), nil
+		idx, err = d.decInt32(TAG_READ)
+		if err != nil {
+			return nil, err
+		}
+
+		typ, cls, err = getStructDefByIndex(int(idx))
+		if err != nil {
+			return nil, err
+		}
+
+		return d.decInstance(typ, cls)
+
+	case (BC_OBJECT_DIRECT <= tag && tag <= (BC_OBJECT_DIRECT+OBJECT_DIRECT_MAX)):
+		typ, cls, err = getStructDefByIndex(int(tag - BC_OBJECT_DIRECT))
+		if err != nil {
+			return nil, err
+		}
+
+		return d.decInstance(typ, cls)
 
 	default:
 		return nil, newCodecError("decObject illegal object type tag:", tag)

@@ -146,6 +146,49 @@ func getGoNameByIndex(idx int) (string, error) {
 	return name, nil
 }
 
+func getStructDef(typeName string) (reflect.Type, classDef, error) {
+	var (
+		ok bool
+		s  structInfo
+	)
+
+	pojoRegistry.RLock()
+	defer pojoRegistry.RUnlock()
+	s, ok = pojoRegistry.registry[typeName]
+	if !ok {
+		return nil, classDef{}, fmt.Errorf("can not find type name %s in registry", typeName)
+	}
+	if len(pojoRegistry.clsDefList) <= s.index {
+		return nil, classDef{}, fmt.Errorf("illegal class index %d", s.index)
+	}
+
+	return s.typ, pojoRegistry.clsDefList[s.index], nil
+}
+
+func getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
+	var (
+		ok      bool
+		clsName string
+		cls     classDef
+		s       structInfo
+	)
+
+	pojoRegistry.RLock()
+	defer pojoRegistry.RUnlock()
+
+	if len(pojoRegistry.clsDefList) <= idx {
+		return nil, cls, fmt.Errorf("illegal class index @idx %d", idx)
+	}
+	cls = pojoRegistry.clsDefList[idx]
+	clsName = pojoRegistry.j2g[cls.javaName]
+	s, ok = pojoRegistry.registry[clsName]
+	if !ok {
+		return nil, cls, fmt.Errorf("can not find go type name %s in registry", clsName)
+	}
+
+	return s.typ, cls, nil
+}
+
 // Create a new instance whose go struct name is @t.
 // the return value is nil if @o has been registered.
 func createInstance(typeName string) interface{} {

@@ -23,7 +23,7 @@ import (
 	log "github.com/AlexStocks/log4go"
 )
 
-// nil bool int8 int32 int64 float64 time.Time
+// nil bool int8 int32 int64 float32 float64 time.Time
 // string []byte []interface{} map[interface{}]interface{}
 // array object struct
 

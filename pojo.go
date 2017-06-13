@@ -176,7 +176,7 @@ func getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
 	pojoRegistry.RLock()
 	defer pojoRegistry.RUnlock()
 
-	if len(pojoRegistry.clsDefList) <= idx {
+	if len(pojoRegistry.clsDefList) <= idx || idx < 0 {
 		return nil, cls, fmt.Errorf("illegal class index @idx %d", idx)
 	}
 	cls = pojoRegistry.clsDefList[idx]

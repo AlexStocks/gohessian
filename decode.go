@@ -769,6 +769,10 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			ary[j] = it
 		}
 
+		if tag == BC_LIST_VARIABLE {
+			d.readBufByte()
+		}
+
 		d.appendRefs(&ary)
 
 		return ary, nil
@@ -792,7 +796,9 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			ary[j] = it
 		}
 		//read the endbyte of list
-		d.readBufByte()
+		if tag == BC_LIST_VARIABLE_UNTYPED {
+			d.readBufByte()
+		}
 
 		d.appendRefs(&ary)
 
@@ -1127,7 +1133,8 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			d.decMapByValue(fldValue)
 
 		case kind == reflect.Slice || kind == reflect.Array:
-			m, _ := d.Decode()
+			// m, _ := d.Decode()
+			m, _ := d.decList(TAG_READ)
 			v := reflect.ValueOf(m)
 			if v.Len() > 0 {
 				sl := reflect.MakeSlice(fldValue.Type(), v.Len(), v.Len())
@@ -1138,7 +1145,7 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			}
 
 		case kind == reflect.Struct:
-			s, err := d.Decode()
+			s, err := d.decObject(TAG_READ)
 			if err != nil {
 				return nil, newCodecError("decInstance->Decode", err)
 			}

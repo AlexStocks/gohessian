@@ -28,7 +28,7 @@ type JavaEnum interface {
 type classDef struct {
 	javaName      string
 	fieldNameList []string
-	b             []byte // encoded buffer
+	buffer        []byte // encoded buffer
 }
 
 type structInfo struct {
@@ -90,7 +90,7 @@ func RegisterPOJO(o POJO) int {
 		pojoRegistry.j2g[t.javaName] = t.goName
 
 		b = b[:0]
-		b = encBT(b, BC_OBJECT_DEF)
+		b = encByte(b, BC_OBJECT_DEF)
 		b = encString(t.javaName, b)
 		l = l[:0]
 		n = t.typ.NumField()
@@ -102,7 +102,7 @@ func RegisterPOJO(o POJO) int {
 		}
 
 		c = classDef{javaName: t.javaName, fieldNameList: l}
-		c.b = append(c.b, b[:]...)
+		c.buffer = append(c.buffer, b[:]...)
 		t.index = len(pojoRegistry.clsDefList)
 		pojoRegistry.clsDefList = append(pojoRegistry.clsDefList, c)
 		pojoRegistry.registry[t.goName] = t

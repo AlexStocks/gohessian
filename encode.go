@@ -12,6 +12,7 @@ package hessian
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"time"
@@ -20,32 +21,43 @@ import (
 
 import (
 	"github.com/AlexStocks/goext/strings"
-	log "github.com/AlexStocks/log4go"
 )
 
 // nil bool int8 int32 int64 float32 float64 time.Time
 // string []byte []interface{} map[interface{}]interface{}
 // array object struct
 
-const (
-	ENCODER_DEBUG = false
-)
-
 type Encoder struct {
 	clsDefList []classDef
+	buffer     []byte
+}
+
+func NewEncoder() *Encoder {
+	var buffer []byte = make([]byte, 64)
+
+	return &Encoder{
+		buffer: buffer[:0],
+	}
+}
+
+func (e *Encoder) Buffer() []byte {
+	return e.buffer[:]
 }
 
 // If @v can not be encoded, the return value is nil. At present only struct may can not be encoded.
-func (e *Encoder) Encode(v interface{}, b []byte) []byte {
+func (e *Encoder) Encode(v interface{}) error {
 	if v == nil {
-		return encNull(b)
+		e.buffer = encNull(e.buffer)
+		return nil
 	}
+
 	switch v.(type) {
 	case nil:
-		return encNull(b)
+		e.buffer = encNull(e.buffer)
+		return nil
 
 	case bool:
-		b = encBool(v.(bool), b)
+		e.buffer = encBool(v.(bool), e.buffer)
 
 	case int:
 		// if v.(int) >= -2147483648 && v.(int) <= 2147483647 {
@@ -54,32 +66,32 @@ func (e *Encoder) Encode(v interface{}, b []byte) []byte {
 		// 	b = encInt64(int64(v.(int)), b)
 		// }
 		// 把int统一按照int64处理，这样才不会导致decode的时候出现" reflect: Call using int32 as type int64 [recovered]"这种panic
-		b = encInt64(int64(v.(int)), b)
+		e.buffer = encInt64(int64(v.(int)), e.buffer)
 
 	case int32:
-		b = encInt32(v.(int32), b)
+		e.buffer = encInt32(v.(int32), e.buffer)
 
 	case int64:
-		b = encInt64(v.(int64), b)
+		e.buffer = encInt64(v.(int64), e.buffer)
 
 	case time.Time:
-		b = encDateInMs(v.(time.Time), b)
-		// b = encDateInMimute(v.(time.Time), b)
+		e.buffer = encDateInMs(v.(time.Time), e.buffer)
+		// e.buffer = encDateInMimute(v.(time.Time), e.buffer)
 
 	case float32:
-		b = encFloat(float64(v.(float32)), b)
+		e.buffer = encFloat(float64(v.(float32)), e.buffer)
 
 	case float64:
-		b = encFloat(v.(float64), b)
+		e.buffer = encFloat(v.(float64), e.buffer)
 
 	case string:
-		b = encString(v.(string), b)
+		e.buffer = encString(v.(string), e.buffer)
 
 	case []byte:
-		b = encBinary(v.([]byte), b)
+		e.buffer = encBinary(v.([]byte), e.buffer)
 
 	case map[interface{}]interface{}:
-		b = e.encUntypedMap(v.(map[interface{}]interface{}), b)
+		return e.encUntypedMap(v.(map[interface{}]interface{}))
 
 	default:
 		t := reflect.TypeOf(v)
@@ -91,33 +103,27 @@ func (e *Encoder) Encode(v interface{}, b []byte) []byte {
 		switch t.Kind() {
 		case reflect.Struct:
 			if p, ok := v.(POJO); ok {
-				b = e.encStruct(p, b)
+				return e.encStruct(p)
 			} else {
-				log.Warn("struct type not Support! %s is not a instance of POJO", t.Kind().String())
-				panic("unknow struct type, not instance of POJO")
+				return fmt.Errorf("struct type not Support! %s is not a instance of POJO", t.Kind().String())
 			}
 		case reflect.Slice, reflect.Array:
-			b = e.encUntypedList(v, b)
+			return e.encUntypedList(v)
 		case reflect.Map: // 进入这个case，就说明map可能是map[string]int这种类型
-			b = e.encMap(v, b)
+			return e.encMap(v)
 		default:
-			log.Warn("type not Support! %s", t.Kind().String())
-			panic("unknow type")
+			return fmt.Errorf("type not Support! %s", t.Kind().String())
 		}
 	}
 
-	if ENCODER_DEBUG {
-		log.Debug(SprintHex(b))
-	}
-
-	return b
+	return nil
 }
 
 //=====================================
 //对各种数据类型的编码
 //=====================================
 
-func encBT(b []byte, t ...byte) []byte {
+func encByte(b []byte, t ...byte) []byte {
 	return append(b, t...)
 }
 
@@ -155,14 +161,14 @@ func encBool(v bool, b []byte) []byte {
 // ::= [xd0-xd7] b1 b0       # -x40000 to x3ffff
 func encInt32(v int32, b []byte) []byte {
 	if int32(INT_DIRECT_MIN) <= v && v <= int32(INT_DIRECT_MAX) {
-		return encBT(b, byte(v+int32(BC_INT_ZERO)))
+		return encByte(b, byte(v+int32(BC_INT_ZERO)))
 	} else if int32(INT_BYTE_MIN) <= v && v <= int32(INT_BYTE_MAX) {
-		return encBT(b, byte(int32(BC_INT_BYTE_ZERO)+v>>8), byte(v))
+		return encByte(b, byte(int32(BC_INT_BYTE_ZERO)+v>>8), byte(v))
 	} else if int32(INT_SHORT_MIN) <= v && v <= int32(INT_SHORT_MAX) {
-		return encBT(b, byte(v>>16+int32(BC_INT_SHORT_ZERO)), byte(v>>8), byte(v))
+		return encByte(b, byte(v>>16+int32(BC_INT_SHORT_ZERO)), byte(v>>8), byte(v))
 	}
 
-	return encBT(b, byte('I'), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+	return encByte(b, byte('I'), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
 /////////////////////////////////////////
@@ -177,16 +183,16 @@ func encInt32(v int32, b []byte) []byte {
 // ::= x59 b3 b2 b1 b0       # 32-bit integer cast to long
 func encInt64(v int64, b []byte) []byte {
 	if int64(LONG_DIRECT_MIN) <= v && v <= int64(LONG_DIRECT_MAX) {
-		return encBT(b, byte(v-int64(BC_LONG_ZERO)))
+		return encByte(b, byte(v-int64(BC_LONG_ZERO)))
 	} else if int64(LONG_BYTE_MIN) <= v && v <= int64(LONG_BYTE_MAX) {
-		return encBT(b, byte(int64(BC_LONG_BYTE_ZERO)+(v>>8)), byte(v))
+		return encByte(b, byte(int64(BC_LONG_BYTE_ZERO)+(v>>8)), byte(v))
 	} else if int64(LONG_SHORT_MIN) <= v && v <= int64(LONG_SHORT_MAX) {
-		return encBT(b, byte(int64(BC_LONG_SHORT_ZERO)+(v>>16)), byte(v>>8), byte(v))
+		return encByte(b, byte(int64(BC_LONG_SHORT_ZERO)+(v>>16)), byte(v>>8), byte(v))
 	} else if 0x80000000 <= v && v <= 0x7fffffff {
-		return encBT(b, BC_LONG_INT, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return encByte(b, BC_LONG_INT, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 
-	return encBT(b, 'L', byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+	return encByte(b, 'L', byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
 /////////////////////////////////////////
@@ -223,14 +229,14 @@ func encFloat(v float64, b []byte) []byte {
 		iv := int64(v)
 		switch iv {
 		case 0:
-			return encBT(b, BC_DOUBLE_ZERO)
+			return encByte(b, BC_DOUBLE_ZERO)
 		case 1:
-			return encBT(b, BC_DOUBLE_ONE)
+			return encByte(b, BC_DOUBLE_ONE)
 		}
 		if iv >= -0x80 && iv < 0x80 {
-			return encBT(b, BC_DOUBLE_BYTE, byte(iv))
+			return encByte(b, BC_DOUBLE_BYTE, byte(iv))
 		} else if iv >= -0x8000 && iv < 0x8000 {
-			return encBT(b, BC_DOUBLE_BYTE, byte(iv>>8), byte(iv))
+			return encByte(b, BC_DOUBLE_BYTE, byte(iv>>8), byte(iv))
 		}
 
 		goto END
@@ -238,7 +244,7 @@ func encFloat(v float64, b []byte) []byte {
 
 END:
 	bits := uint64(math.Float64bits(v))
-	return encBT(b, BC_DOUBLE, byte(bits>>56), byte(bits>>48), byte(bits>>40),
+	return encByte(b, BC_DOUBLE, byte(bits>>56), byte(bits>>48), byte(bits>>40),
 		byte(bits>>32), byte(bits>>24), byte(bits>>16), byte(bits>>8), byte(bits))
 }
 
@@ -267,7 +273,7 @@ func encString(v string, b []byte) []byte {
 	)
 
 	if v == "" {
-		return encBT(b, BC_STRING_DIRECT)
+		return encByte(b, BC_STRING_DIRECT)
 	}
 
 	for {
@@ -276,17 +282,17 @@ func encString(v string, b []byte) []byte {
 			break
 		}
 		if vLen > CHUNK_SIZE {
-			b = encBT(b, BC_STRING_CHUNK)
-			b = encBT(b, PackUint16(uint16(CHUNK_SIZE))...)
+			b = encByte(b, BC_STRING_CHUNK)
+			b = encByte(b, PackUint16(uint16(CHUNK_SIZE))...)
 			vChunk(CHUNK_SIZE)
 		} else {
 			if vLen <= int(STRING_DIRECT_MAX) {
-				b = encBT(b, byte(vLen+int(BC_STRING_DIRECT)))
+				b = encByte(b, byte(vLen+int(BC_STRING_DIRECT)))
 			} else if vLen <= int(STRING_SHORT_MAX) {
-				b = encBT(b, byte((vLen>>8)+int(BC_STRING_SHORT)), byte(vLen))
+				b = encByte(b, byte((vLen>>8)+int(BC_STRING_SHORT)), byte(vLen))
 			} else {
-				b = encBT(b, BC_STRING)
-				b = encBT(b, PackUint16(uint16(vLen))...)
+				b = encByte(b, BC_STRING)
+				b = encByte(b, PackUint16(uint16(vLen))...)
 			}
 			vChunk(vLen)
 		}
@@ -311,7 +317,7 @@ func encBinary(v []byte, b []byte) []byte {
 	)
 
 	if len(v) == 0 {
-		return encBT(b, BC_BINARY_DIRECT)
+		return encByte(b, BC_BINARY_DIRECT)
 	}
 
 	vLength = len(v)
@@ -319,15 +325,15 @@ func encBinary(v []byte, b []byte) []byte {
 		// if vBuf.Len() > CHUNK_SIZE {
 		if vLength > CHUNK_SIZE {
 			length = CHUNK_SIZE
-			b = encBT(b, byte(BC_BINARY_CHUNK), byte(length>>8), byte(length))
+			b = encByte(b, byte(BC_BINARY_CHUNK), byte(length>>8), byte(length))
 		} else {
 			length = uint16(vLength)
 			if vLength <= int(BINARY_DIRECT_MAX) {
-				b = encBT(b, byte(int(BC_BINARY_DIRECT)+vLength))
+				b = encByte(b, byte(int(BC_BINARY_DIRECT)+vLength))
 			} else if vLength <= int(BINARY_SHORT_MAX) {
-				b = encBT(b, byte(int(BC_BINARY_SHORT)+vLength>>8), byte(vLength))
+				b = encByte(b, byte(int(BC_BINARY_SHORT)+vLength>>8), byte(vLength))
 			} else {
-				b = encBT(b, byte(BC_BINARY), byte(vLength>>8), byte(vLength))
+				b = encByte(b, byte(BC_BINARY), byte(vLength>>8), byte(vLength))
 			}
 		}
 
@@ -350,15 +356,21 @@ func encBinary(v []byte, b []byte) []byte {
 // ::= x58 int value*        # fixed-length untyped list
 // ::= [x70-77] type value*  # fixed-length typed list
 // ::= [x78-7f] value*       # fixed-length untyped list
-func (e *Encoder) encUntypedList(v interface{}, b []byte) []byte {
+func (e *Encoder) encUntypedList(v interface{}) error {
+	var (
+		err error
+	)
+
 	reflectValue := reflect.ValueOf(v)
-	b = encBT(b, BC_LIST_FIXED_UNTYPED) // x58
-	b = encInt32(int32(reflectValue.Len()), b)
+	e.buffer = encByte(e.buffer, BC_LIST_FIXED_UNTYPED) // x58
+	e.buffer = encInt32(int32(reflectValue.Len()), e.buffer)
 	for i := 0; i < reflectValue.Len(); i++ {
-		b = e.Encode(reflectValue.Index(i).Interface(), b)
+		if err = e.Encode(reflectValue.Index(i).Interface()); err != nil {
+			return err
+		}
 	}
 
-	return b
+	return nil
 }
 
 /////////////////////////////////////////
@@ -367,21 +379,25 @@ func (e *Encoder) encUntypedList(v interface{}, b []byte) []byte {
 
 // ::= 'M' type (value value)* 'Z'  # key, value map pairs
 // ::= 'H' (value value)* 'Z'       # untyped key, value
-func (e *Encoder) encUntypedMap(m map[interface{}]interface{}, b []byte) []byte {
+func (e *Encoder) encUntypedMap(m map[interface{}]interface{}) error {
 	if len(m) == 0 {
-		return b
+		return nil
 	}
 
-	b = encBT(b, BC_MAP_UNTYPED)
-
+	var err error
+	e.buffer = encByte(e.buffer, BC_MAP_UNTYPED)
 	for k, v := range m {
-		b = e.Encode(k, b)
-		b = e.Encode(v, b)
+		if err = e.Encode(k); err != nil {
+			return err
+		}
+		if err = e.Encode(v); err != nil {
+			return err
+		}
 	}
 
-	b = encBT(b, BC_END) // 'Z'
+	e.buffer = encByte(e.buffer, BC_END) // 'Z'
 
-	return b
+	return nil
 }
 
 func buildMapKey(key reflect.Value, typ reflect.Type) interface{} {
@@ -409,33 +425,36 @@ func buildMapKey(key reflect.Value, typ reflect.Type) interface{} {
 	return newCodecError("unsuport key kind " + typ.Kind().String())
 }
 
-func (e *Encoder) encMap(m interface{}, b []byte) []byte {
+func (e *Encoder) encMap(m interface{}) error {
 	var (
-		buf   []byte // 如果map encode失败，也不会影响b中已有的内容
+		err   error
 		typ   reflect.Type
 		value reflect.Value
 		keys  []reflect.Value
 	)
 
-	// buf = append(buf, 'M')
-	buf = encBT(buf, BC_MAP_UNTYPED)
 	value = reflect.ValueOf(m)
 	typ = reflect.TypeOf(m).Key()
 	keys = value.MapKeys()
 	if len(keys) == 0 {
-		return b
+		return nil
 	}
+	e.buffer = encByte(e.buffer, BC_MAP_UNTYPED)
 	for i := 0; i < len(keys); i++ {
 		k := buildMapKey(keys[i], typ)
 		if k == nil {
-			return b
+			return nil
 		}
-		buf = e.Encode(k, buf)
-		buf = e.Encode(value.MapIndex(keys[i]).Interface(), buf)
+		if err = e.Encode(k); err != nil {
+			return nil
+		}
+		if err = e.Encode(value.MapIndex(keys[i]).Interface()); err != nil {
+			return err
+		}
 	}
-	buf = append(buf, BC_END)
+	e.buffer = encByte(e.buffer, BC_END)
 
-	return append(b, buf...)
+	return nil
 }
 
 /////////////////////////////////////////
@@ -502,12 +521,13 @@ func (e *Encoder) encMap(m interface{}, b []byte) []byte {
 //  x04 BLUE                # BLUE value
 //
 //x51 x91                   # object ref #1, i.e. Color.GREEN
-func (e *Encoder) encStruct(v POJO, b []byte) []byte {
+func (e *Encoder) encStruct(v POJO) error {
 	var (
 		ok     bool
 		i      int
 		idx    int
 		num    int
+		err    error
 		clsDef classDef
 	)
 
@@ -529,20 +549,22 @@ func (e *Encoder) encStruct(v POJO, b []byte) []byte {
 		_, clsDef, _ = getStructDefByIndex(idx)
 		idx = len(e.clsDefList)
 		e.clsDefList = append(e.clsDefList, clsDef)
-		b = append(b, clsDef.b...)
+		e.buffer = append(e.buffer, clsDef.buffer...)
 	}
 
 	// write object instance
 	if byte(idx) <= OBJECT_DIRECT_MAX {
-		b = encBT(b, byte(idx)+BC_OBJECT_DIRECT)
+		e.buffer = encByte(e.buffer, byte(idx)+BC_OBJECT_DIRECT)
 	} else {
-		b = encBT(b, BC_OBJECT)
-		b = encInt32(int32(idx), b)
+		e.buffer = encByte(e.buffer, BC_OBJECT)
+		e.buffer = encInt32(int32(idx), e.buffer)
 	}
 	num = vv.NumField()
 	for i = 0; i < num; i++ {
-		b = e.Encode(vv.Field(i).Interface(), b)
+		if err = e.Encode(vv.Field(i).Interface()); err != nil {
+			return err
+		}
 	}
 
-	return b
+	return nil
 }

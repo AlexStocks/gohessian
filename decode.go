@@ -21,8 +21,9 @@ import (
 )
 
 type Decoder struct {
-	reader *bufio.Reader
-	refs   []interface{}
+	reader     *bufio.Reader
+	refs       []interface{}
+	clsDefList []classDef
 }
 
 var (
@@ -101,6 +102,7 @@ func (d *Decoder) decType() (string, error) {
 		buf []byte
 		tag byte
 		idx int32
+		typ reflect.Type
 	)
 
 	buf = arr[:1]
@@ -117,7 +119,12 @@ func (d *Decoder) decType() (string, error) {
 		return "", newCodecError("decType reading tag", err)
 	}
 
-	return getGoNameByIndex(int(idx))
+	typ, _, err = d.getStructDefByIndex(int(idx))
+	if err == nil {
+		return typ.String(), nil
+	}
+
+	return "", err
 }
 
 //解析 hessian 数据包
@@ -327,8 +334,8 @@ func (d *Decoder) decDate(flag int32) (time.Time, error) {
 			return t, ErrNotEnoughBuf
 		}
 		i64 = UnpackInt64(s)
-		// return time.Unix(i64/1000, i64%1000*10e5), nil
-		return time.Unix(i64/1000, i64*100), nil
+		return time.Unix(i64/1000, i64%1000*10e5), nil
+		// return time.Unix(i64/1000, i64*100), nil
 
 	case tag == BC_DATE_MINUTE:
 		s = buf[:4]
@@ -1161,6 +1168,30 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 	return vv, nil
 }
 
+func (d *Decoder) appendClsDef(cd classDef) {
+	d.clsDefList = append(d.clsDefList, cd)
+}
+
+func (d *Decoder) getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
+	var (
+		ok      bool
+		clsName string
+		cls     classDef
+		s       structInfo
+	)
+
+	if len(d.clsDefList) <= idx || idx < 0 {
+		return nil, cls, fmt.Errorf("illegal class index @idx %d", idx)
+	}
+	cls = d.clsDefList[idx]
+	s, ok = getStructInfo(cls.javaName)
+	if !ok {
+		return nil, cls, fmt.Errorf("can not find go type name %s in registry", clsName)
+	}
+
+	return s.typ, cls, nil
+}
+
 func (d *Decoder) decObject(flag int32) (interface{}, error) {
 	var (
 		tag byte
@@ -1184,7 +1215,7 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		}
 		cls, _ = clsDef.(classDef)
 		//add to slice
-		appendClsDef(cls)
+		d.appendClsDef(cls)
 		return d.Decode()
 
 	case tag == BC_OBJECT:
@@ -1193,7 +1224,7 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 			return nil, err
 		}
 
-		typ, cls, err = getStructDefByIndex(int(idx))
+		typ, cls, err = d.getStructDefByIndex(int(idx))
 		if err != nil {
 			return nil, err
 		}
@@ -1201,7 +1232,7 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		return d.decInstance(typ, cls)
 
 	case (BC_OBJECT_DIRECT <= tag && tag <= (BC_OBJECT_DIRECT+OBJECT_DIRECT_MAX)):
-		typ, cls, err = getStructDefByIndex(int(tag - BC_OBJECT_DIRECT))
+		typ, cls, err = d.getStructDefByIndex(int(tag - BC_OBJECT_DIRECT))
 		if err != nil {
 			return nil, err
 		}

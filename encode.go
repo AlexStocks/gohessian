@@ -31,8 +31,12 @@ const (
 	ENCODER_DEBUG = false
 )
 
+type Encoder struct {
+	clsDefList []classDef
+}
+
 // If @v can not be encoded, the return value is nil. At present only struct may can not be encoded.
-func Encode(v interface{}, b []byte) []byte {
+func (e *Encoder) Encode(v interface{}, b []byte) []byte {
 	if v == nil {
 		return encNull(b)
 	}
@@ -60,6 +64,7 @@ func Encode(v interface{}, b []byte) []byte {
 
 	case time.Time:
 		b = encDateInMs(v.(time.Time), b)
+		// b = encDateInMimute(v.(time.Time), b)
 
 	case float32:
 		b = encFloat(float64(v.(float32)), b)
@@ -74,7 +79,7 @@ func Encode(v interface{}, b []byte) []byte {
 		b = encBinary(v.([]byte), b)
 
 	case map[interface{}]interface{}:
-		b = encUntypedMap(v.(map[interface{}]interface{}), b)
+		b = e.encUntypedMap(v.(map[interface{}]interface{}), b)
 
 	default:
 		t := reflect.TypeOf(v)
@@ -86,15 +91,15 @@ func Encode(v interface{}, b []byte) []byte {
 		switch t.Kind() {
 		case reflect.Struct:
 			if p, ok := v.(POJO); ok {
-				b = encStruct(p, b)
+				b = e.encStruct(p, b)
 			} else {
 				log.Warn("struct type not Support! %s is not a instance of POJO", t.Kind().String())
 				panic("unknow struct type, not instance of POJO")
 			}
 		case reflect.Slice, reflect.Array:
-			b = encUntypedList(v, b)
+			b = e.encUntypedList(v, b)
 		case reflect.Map: // 进入这个case，就说明map可能是map[string]int这种类型
-			b = encMap(v, b)
+			b = e.encMap(v, b)
 		default:
 			log.Warn("type not Support! %s", t.Kind().String())
 			panic("unknow type")
@@ -345,12 +350,12 @@ func encBinary(v []byte, b []byte) []byte {
 // ::= x58 int value*        # fixed-length untyped list
 // ::= [x70-77] type value*  # fixed-length typed list
 // ::= [x78-7f] value*       # fixed-length untyped list
-func encUntypedList(v interface{}, b []byte) []byte {
+func (e *Encoder) encUntypedList(v interface{}, b []byte) []byte {
 	reflectValue := reflect.ValueOf(v)
 	b = encBT(b, BC_LIST_FIXED_UNTYPED) // x58
 	b = encInt32(int32(reflectValue.Len()), b)
 	for i := 0; i < reflectValue.Len(); i++ {
-		b = Encode(reflectValue.Index(i).Interface(), b)
+		b = e.Encode(reflectValue.Index(i).Interface(), b)
 	}
 
 	return b
@@ -362,7 +367,7 @@ func encUntypedList(v interface{}, b []byte) []byte {
 
 // ::= 'M' type (value value)* 'Z'  # key, value map pairs
 // ::= 'H' (value value)* 'Z'       # untyped key, value
-func encUntypedMap(m map[interface{}]interface{}, b []byte) []byte {
+func (e *Encoder) encUntypedMap(m map[interface{}]interface{}, b []byte) []byte {
 	if len(m) == 0 {
 		return b
 	}
@@ -370,8 +375,8 @@ func encUntypedMap(m map[interface{}]interface{}, b []byte) []byte {
 	b = encBT(b, BC_MAP_UNTYPED)
 
 	for k, v := range m {
-		b = Encode(k, b)
-		b = Encode(v, b)
+		b = e.Encode(k, b)
+		b = e.Encode(v, b)
 	}
 
 	b = encBT(b, BC_END) // 'Z'
@@ -404,7 +409,7 @@ func buildMapKey(key reflect.Value, typ reflect.Type) interface{} {
 	return newCodecError("unsuport key kind " + typ.Kind().String())
 }
 
-func encMap(m interface{}, b []byte) []byte {
+func (e *Encoder) encMap(m interface{}, b []byte) []byte {
 	var (
 		buf   []byte // 如果map encode失败，也不会影响b中已有的内容
 		typ   reflect.Type
@@ -425,8 +430,8 @@ func encMap(m interface{}, b []byte) []byte {
 		if k == nil {
 			return b
 		}
-		buf = Encode(k, buf)
-		buf = Encode(value.MapIndex(keys[i]).Interface(), buf)
+		buf = e.Encode(k, buf)
+		buf = e.Encode(value.MapIndex(keys[i]).Interface(), buf)
 	}
 	buf = append(buf, BC_END)
 
@@ -497,25 +502,46 @@ func encMap(m interface{}, b []byte) []byte {
 //  x04 BLUE                # BLUE value
 //
 //x51 x91                   # object ref #1, i.e. Color.GREEN
-func encStruct(v POJO, b []byte) []byte {
+func (e *Encoder) encStruct(v POJO, b []byte) []byte {
+	var (
+		ok     bool
+		i      int
+		idx    int
+		num    int
+		clsDef classDef
+	)
+
 	vv := reflect.ValueOf(v)
 
 	// write object definition
-	l, ok := checkPOJORegistry(typeof(v))
-	if !ok { // 不存在
-		l = RegisterPOJO(v)
+	idx = -1
+	for i = range e.clsDefList {
+		if v.JavaClassName() == e.clsDefList[i].javaName {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		idx, ok = checkPOJORegistry(typeof(v))
+		if !ok { // 不存在
+			idx = RegisterPOJO(v)
+		}
+		_, clsDef, _ = getStructDefByIndex(idx)
+		idx = len(e.clsDefList)
+		e.clsDefList = append(e.clsDefList, clsDef)
+		b = append(b, clsDef.b...)
 	}
 
 	// write object instance
-	if byte(l) <= OBJECT_DIRECT_MAX {
-		b = encBT(b, byte(l)+BC_OBJECT_DIRECT)
+	if byte(idx) <= OBJECT_DIRECT_MAX {
+		b = encBT(b, byte(idx)+BC_OBJECT_DIRECT)
 	} else {
 		b = encBT(b, BC_OBJECT)
-		b = encInt32(int32(l), b)
+		b = encInt32(int32(idx), b)
 	}
-	num := vv.NumField()
-	for i := 0; i < num; i++ {
-		b = Encode(vv.Field(i).Interface(), b)
+	num = vv.NumField()
+	for i = 0; i < num; i++ {
+		b = e.Encode(vv.Field(i).Interface(), b)
 	}
 
 	return b

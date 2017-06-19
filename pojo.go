@@ -115,54 +115,35 @@ func RegisterPOJO(o POJO) int {
 	return i
 }
 
-// check if go struct name @typeName has been registered or not.
-func checkPOJORegistry(typeName string) (int, bool) {
+// check if go struct name @goName has been registered or not.
+func checkPOJORegistry(goName string) (int, bool) {
 	var (
 		ok bool
 		s  structInfo
 	)
 	pojoRegistry.RLock()
-	s, ok = pojoRegistry.registry[typeName]
+	s, ok = pojoRegistry.registry[goName]
 	pojoRegistry.RUnlock()
 
 	return s.index, ok
 }
 
-// get go struct name by @idx
-func getGoNameByIndex(idx int) (string, error) {
-	var (
-		cd   classDef
-		name string
-	)
-
-	pojoRegistry.RLock()
-	if idx >= len(pojoRegistry.clsDefList) {
-		return name, fmt.Errorf("illegal classDef index:%d", idx)
-	}
-	cd = pojoRegistry.clsDefList[idx]
-	name = pojoRegistry.j2g[cd.javaName]
-	pojoRegistry.RUnlock()
-
-	return name, nil
-}
-
-func getStructDef(typeName string) (reflect.Type, classDef, error) {
+// @typeName is class's java name
+func getStructInfo(javaName string) (structInfo, bool) {
 	var (
 		ok bool
+		g  string
 		s  structInfo
 	)
 
 	pojoRegistry.RLock()
-	defer pojoRegistry.RUnlock()
-	s, ok = pojoRegistry.registry[typeName]
-	if !ok {
-		return nil, classDef{}, fmt.Errorf("can not find type name %s in registry", typeName)
+	g, ok = pojoRegistry.j2g[javaName]
+	if ok {
+		s, ok = pojoRegistry.registry[g]
 	}
-	if len(pojoRegistry.clsDefList) <= s.index {
-		return nil, classDef{}, fmt.Errorf("illegal class index %d", s.index)
-	}
+	pojoRegistry.RUnlock()
 
-	return s.typ, pojoRegistry.clsDefList[s.index], nil
+	return s, ok
 }
 
 func getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
@@ -189,26 +170,20 @@ func getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
 	return s.typ, cls, nil
 }
 
-// Create a new instance whose go struct name is @t.
+// Create a new instance by its struct name is @goName.
 // the return value is nil if @o has been registered.
-func createInstance(typeName string) interface{} {
+func createInstance(goName string) interface{} {
 	var (
 		ok bool
 		s  structInfo
 	)
 
 	pojoRegistry.RLock()
-	s, ok = pojoRegistry.registry[typeName]
+	s, ok = pojoRegistry.registry[goName]
 	pojoRegistry.RUnlock()
 	if !ok {
 		return nil
 	}
 
 	return reflect.New(s.typ).Interface()
-}
-
-func appendClsDef(cd classDef) {
-	pojoRegistry.Lock()
-	pojoRegistry.clsDefList = append(pojoRegistry.clsDefList, cd)
-	pojoRegistry.Unlock()
 }

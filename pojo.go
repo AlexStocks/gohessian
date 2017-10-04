@@ -85,8 +85,8 @@ func RegisterPOJO(o POJO) int {
 	pojoRegistry.Lock()
 	if _, ok = pojoRegistry.registry[o.JavaClassName()]; !ok {
 		t.goName = typeof(o)
-		t.javaName = o.JavaClassName()
 		t.typ = reflect.TypeOf(o)
+		t.javaName = t.typ.String()
 		pojoRegistry.j2g[t.javaName] = t.goName
 
 		b = b[:0]

@@ -44,6 +44,10 @@ func (e *Encoder) Buffer() []byte {
 	return e.buffer[:]
 }
 
+func (e *Encoder) Append(buf []byte) {
+	e.buffer = append(e.buffer, buf[:]...)
+}
+
 // If @v can not be encoded, the return value is nil. At present only struct may can not be encoded.
 func (e *Encoder) Encode(v interface{}) error {
 	if v == nil {

@@ -62,11 +62,6 @@ func showPOJORegistry() {
 	pojoRegistry.Unlock()
 }
 
-// get @v go struct name
-func typeof(v interface{}) string {
-	return reflect.TypeOf(v).String()
-}
-
 // the return value is -1 if @o has been registered.
 // # definition for an object (compact map)
 // class-def  ::= 'C' string int string*
@@ -83,10 +78,11 @@ func RegisterPOJO(o POJO) int {
 	)
 
 	pojoRegistry.Lock()
+	defer pojoRegistry.Unlock()
 	if _, ok = pojoRegistry.registry[o.JavaClassName()]; !ok {
-		t.goName = typeof(o)
 		t.typ = reflect.TypeOf(o)
-		t.javaName = t.typ.String()
+		t.goName = t.typ.String()
+		t.javaName = o.JavaClassName()
 		pojoRegistry.j2g[t.javaName] = t.goName
 
 		b = b[:0]
@@ -110,7 +106,6 @@ func RegisterPOJO(o POJO) int {
 	} else {
 		i = -1
 	}
-	pojoRegistry.Unlock()
 
 	return i
 }

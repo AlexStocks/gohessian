@@ -557,9 +557,9 @@ func (d *Decoder) decString(flag int32) (string, error) {
 		}
 
 		return string(runeDate), nil
-	} else {
-		return s, newCodecError("decString byte3 integer")
 	}
+
+	return s, newCodecError(fmt.Sprintf("unknown string tag %#x\n", tag))
 }
 
 /////////////////////////////////////////
@@ -1093,13 +1093,13 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			continue
 		}
 		fldValue := st.Field(index)
-		//fmt.Println("fld", fldName, fldValue, fldValue.Kind())
+		// fmt.Println("fld", fldName, fldValue, fldValue.Kind())
 		if !fldValue.CanSet() {
 			return nil, newCodecError("decInstance CanSet false for " + fldName)
 		}
 		kind := fldValue.Kind()
-		// fmt.Println("fld name:", fldName, ", index:", index, ", fld kind:", kind,
-		// 	", flag:", fldValue.Type() == reflect.TypeOf(hessianNow))
+		// fmt.Println("fld name:", fldName, ", index:", index, ", fld kind:", kind, ", flag:", fldValue.Type(), ", Name:",
+		//	fldValue.Type().Name())
 		switch {
 		case kind == reflect.String:
 			str, err := d.decString(TAG_READ)
@@ -1152,12 +1152,24 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 			}
 
 		case kind == reflect.Struct:
-			s, err := d.decObject(TAG_READ)
-			if err != nil {
-				return nil, newCodecError("decInstance->Decode", err)
-			}
-			if s != nil {
-				fldValue.Set(reflect.Indirect(s.(reflect.Value)))
+			var (
+				err error
+				s   interface{}
+			)
+			if fldValue.Type().String() == "time.Time" {
+				s, err = d.decDate(TAG_READ)
+				if err != nil {
+					return nil, newCodecError("decInstance->decDate", err)
+				}
+				fldValue.Set(reflect.ValueOf(s))
+			} else {
+				s, err = d.decObject(TAG_READ)
+				if err != nil {
+					return nil, newCodecError("decInstance->decObject", err)
+				}
+				if s != nil {
+					fldValue.Set(reflect.Indirect(s.(reflect.Value)))
+				}
 			}
 
 		default:

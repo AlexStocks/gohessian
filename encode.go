@@ -461,6 +461,11 @@ func (e *Encoder) encMap(m interface{}) error {
 	return nil
 }
 
+// get @v go struct name
+func typeof(v interface{}) string {
+	return reflect.TypeOf(v).String()
+}
+
 /////////////////////////////////////////
 // map/object
 /////////////////////////////////////////

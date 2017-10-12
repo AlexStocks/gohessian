@@ -15,14 +15,25 @@ import (
 	"sync"
 )
 
+const (
+	InvalidJavaEnum JavaEnum = -1
+)
+
 // Pls attention that Every field name should be upper case. Otherwise the app may panic.
 type POJO interface {
 	JavaClassName() string // 获取对应的java classs的package name
 }
 
-type JavaEnum interface {
-	JavaClassName() string
-	EnumStringArray() []string
+type POJOEnum interface {
+	POJO
+	String() string
+	EnumValue(string) JavaEnum
+}
+
+type JavaEnum int32
+
+type JavaEnumClass struct {
+	name string
 }
 
 type classDef struct {
@@ -36,6 +47,7 @@ type structInfo struct {
 	goName   string
 	javaName string
 	index    int // clsDefList index
+	inst     interface{}
 }
 
 type POJORegistry struct {
@@ -50,6 +62,8 @@ var (
 		j2g:      make(map[string]string),
 		registry: make(map[string]structInfo),
 	}
+	pojoType     = reflect.TypeOf((*POJO)(nil)).Elem()
+	javaEnumType = reflect.TypeOf((*POJOEnum)(nil)).Elem()
 )
 
 // 解析struct
@@ -62,7 +76,9 @@ func showPOJORegistry() {
 	pojoRegistry.Unlock()
 }
 
-// the return value is -1 if @o has been registered.
+// Register a POJO instance.
+// The return value is -1 if @o has been registered.
+//
 // # definition for an object (compact map)
 // class-def  ::= 'C' string int string*
 func RegisterPOJO(o POJO) int {
@@ -75,14 +91,24 @@ func RegisterPOJO(o POJO) int {
 		l  []string
 		t  structInfo
 		c  classDef
+		v  reflect.Value
 	)
 
 	pojoRegistry.Lock()
 	defer pojoRegistry.Unlock()
 	if _, ok = pojoRegistry.registry[o.JavaClassName()]; !ok {
-		t.typ = reflect.TypeOf(o)
+		v = reflect.ValueOf(o)
+		switch v.Kind() {
+		case reflect.Struct:
+			t.typ = v.Type()
+		case reflect.Ptr:
+			t.typ = v.Elem().Type()
+		default:
+			t.typ = reflect.TypeOf(o)
+		}
 		t.goName = t.typ.String()
 		t.javaName = o.JavaClassName()
+		t.inst = o
 		pojoRegistry.j2g[t.javaName] = t.goName
 
 		b = b[:0]
@@ -96,6 +122,60 @@ func RegisterPOJO(o POJO) int {
 			l = append(l, f)
 			b = encString(f, b)
 		}
+
+		c = classDef{javaName: t.javaName, fieldNameList: l}
+		c.buffer = append(c.buffer, b[:]...)
+		t.index = len(pojoRegistry.clsDefList)
+		pojoRegistry.clsDefList = append(pojoRegistry.clsDefList, c)
+		pojoRegistry.registry[t.goName] = t
+		i = t.index
+	} else {
+		i = -1
+	}
+
+	return i
+}
+
+// Register a value type JavaEnum variable.
+func RegisterJavaEnum(o POJOEnum) int {
+	var (
+		ok bool
+		b  []byte
+		i  int
+		n  int
+		f  string
+		l  []string
+		t  structInfo
+		c  classDef
+		v  reflect.Value
+	)
+
+	pojoRegistry.Lock()
+	defer pojoRegistry.Unlock()
+	if _, ok = pojoRegistry.registry[o.JavaClassName()]; !ok {
+		v = reflect.ValueOf(o)
+		switch v.Kind() {
+		case reflect.Struct:
+			t.typ = v.Type()
+		case reflect.Ptr:
+			t.typ = v.Elem().Type()
+		default:
+			t.typ = reflect.TypeOf(o)
+		}
+		t.goName = t.typ.String()
+		t.javaName = o.JavaClassName()
+		t.inst = o
+		pojoRegistry.j2g[t.javaName] = t.goName
+
+		b = b[:0]
+		b = encByte(b, BC_OBJECT_DEF)
+		b = encString(t.javaName, b)
+		l = l[:0]
+		n = 1
+		b = encInt32(int32(n), b)
+		f = strings.ToLower("name")
+		l = append(l, f)
+		b = encString(f, b)
 
 		c = classDef{javaName: t.javaName, fieldNameList: l}
 		c.buffer = append(c.buffer, b[:]...)

@@ -20,6 +20,10 @@ import (
 	"time"
 )
 
+import (
+	"github.com/pkg/errors"
+)
+
 type Decoder struct {
 	reader     *bufio.Reader
 	refs       []interface{}
@@ -39,41 +43,45 @@ func NewDecoder(b []byte) *Decoder {
 // utilities
 /////////////////////////////////////////
 
-//读取当前字节,指针不前移
+// 读取当前字节,指针不前移
 func (d *Decoder) peekByte() byte {
 	return d.peek(1)[0]
 }
 
-//添加引用
-func (d *Decoder) appendRefs(v interface{}) {
+// 添加引用
+func (d *Decoder) appendRefs(v interface{}) int {
 	d.refs = append(d.refs, v)
+	return len(d.refs) - 1
 }
 
-//获取缓冲长度
+// 获取缓冲长度
 func (d *Decoder) len() int {
 	d.peek(1) //需要先读一下资源才能得到已缓冲的长度
 	return d.reader.Buffered()
 }
 
-//读取 Decoder 结构中的一个字节,并后移一个字节
+// 读取 Decoder 结构中的一个字节,并后移一个字节
 func (d *Decoder) readByte() (byte, error) {
 	return d.reader.ReadByte()
 }
 
-//读取指定长度的字节,并后移len(b)个字节
+// 前移一个字节
+func (d *Decoder) unreadByte() error {
+	return d.reader.UnreadByte()
+}
+
+// 读取指定长度的字节,并后移len(b)个字节
 func (d *Decoder) next(b []byte) (int, error) {
 	return d.reader.Read(b)
 }
 
-//读取指定长度字节,指针不后移
-// func (d *Decoder) peek(n int) ([]byte, error) {
+// 读取指定长度字节,指针不后移
 func (d *Decoder) peek(n int) []byte {
-	// return d.reader.Peek(n)
 	b, _ := d.reader.Peek(n)
 	return b
 }
 
-//读取len(s)的 utf8 字符
+// 读取len(s)的 utf8 字符
 func (d *Decoder) nextRune(s []rune) []rune {
 	var (
 		n  int
@@ -94,7 +102,7 @@ func (d *Decoder) nextRune(s []rune) []rune {
 	return s
 }
 
-//读取数据类型描述,用于 list 和 map
+// 读取数据类型描述,用于 list 和 map
 func (d *Decoder) decType() (string, error) {
 	var (
 		err error
@@ -127,7 +135,7 @@ func (d *Decoder) decType() (string, error) {
 	return "", err
 }
 
-//解析 hessian 数据包
+// 解析 hessian 数据包
 func (d *Decoder) Decode() (interface{}, error) {
 	var (
 		err error
@@ -768,6 +776,7 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		}
 		// bl := isBuildInType(str)
 		ary := make([]interface{}, size)
+		d.appendRefs(&ary)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
 			if err != nil {
@@ -779,8 +788,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		if tag == BC_LIST_VARIABLE {
 			d.readBufByte()
 		}
-
-		d.appendRefs(&ary)
 
 		return ary, nil
 
@@ -795,6 +802,7 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			size = int(i32)
 		}
 		ary := make([]interface{}, size)
+		d.appendRefs(&ary)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
 			if err != nil {
@@ -806,8 +814,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		if tag == BC_LIST_VARIABLE_UNTYPED {
 			d.readBufByte()
 		}
-
-		d.appendRefs(&ary)
 
 		return ary, nil
 
@@ -889,6 +895,8 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 		}
 		if _, ok = checkPOJORegistry(t); ok {
 			m = make(map[interface{}]interface{}) // 此处假设了map的定义形式，这是不对的
+			d.appendRefs(&m)
+
 			// d.decType() // 忽略
 			for d.peekByte() != byte('z') {
 				k, err = d.Decode()
@@ -906,10 +914,12 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 				m[k] = v
 			}
 			d.readByte()
-			d.appendRefs(&m)
+
 			return m, nil
 		} else {
 			inst = createInstance(t)
+			d.appendRefs(&inst)
+
 			for d.peekByte() != 'z' {
 				if key, err = d.Decode(); err != nil {
 					return nil, err
@@ -931,13 +941,13 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 					reflect.ValueOf(inst).MethodByName(methodName).Call(args)
 				}
 			}
-			// v = inst
-			d.appendRefs(&inst)
+
 			return inst, nil
 		}
 
 	case tag == BC_MAP_UNTYPED:
 		m = make(map[interface{}]interface{})
+		d.appendRefs(&m)
 		for d.peekByte() != byte(BC_END) {
 			k, err = d.Decode()
 			if err != nil {
@@ -954,7 +964,6 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 			m[k] = v
 		}
 		d.readByte()
-		d.appendRefs(&m)
 		return m, nil
 
 	default:
@@ -1080,11 +1089,13 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 		i int
 		j int
 	)
+
 	if typ.Kind() != reflect.Struct {
 		return nil, newCodecError("wrong type expect Struct but get " + typ.String())
 	}
 	vv := reflect.New(typ)
 	st := reflect.ValueOf(vv.Interface()).Elem()
+	d.appendRefs(vv)
 	for i = 0; i < len(cls.fieldNameList); i++ {
 		fldName := cls.fieldNameList[i]
 		index, err := findField(fldName, typ)
@@ -1097,6 +1108,7 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 		if !fldValue.CanSet() {
 			return nil, newCodecError("decInstance CanSet false for " + fldName)
 		}
+
 		kind := fldValue.Kind()
 		// fmt.Println("fld name:", fldName, ", index:", index, ", fld kind:", kind, ", flag:", fldValue.Type(), ", Name:",
 		//	fldValue.Type().Name())
@@ -1111,15 +1123,38 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 		case kind == reflect.Int32 || kind == reflect.Int16:
 			num, err := d.decInt32(TAG_READ)
 			if err != nil {
-				return nil, newCodecError("decInstance->ParseInt:"+fldName, err)
+				// java enum
+				if fldValue.Type().Implements(javaEnumType) {
+					d.unreadByte() // enum解析，上面decInt64已经读取一个字节，所以这里需要回退一个字节
+					s, err := d.Decode()
+					if err != nil {
+						return nil, newCodecError("decInstance->decObject:"+fldName, err)
+					}
+					enumValue, _ := s.(JavaEnum)
+					num = int32(enumValue)
+				} else {
+					return nil, newCodecError("decInstance->ParseInt:"+fldName, err)
+				}
 			}
+
 			fldValue.SetInt(int64(num))
 
 		case kind == reflect.Int || kind == reflect.Int64 || kind == reflect.Uint64:
 			num, err := d.decInt64(TAG_READ)
 			if err != nil {
-				return nil, newCodecError("decInstance->decInt64:"+fldName, err)
+				if fldValue.Type().Implements(javaEnumType) {
+					d.unreadByte() // enum解析，上面decInt64已经读取一个字节，所以这里需要回退一个字节
+					s, err := d.Decode()
+					if err != nil {
+						return nil, newCodecError("decInstance->decObject:"+fldName, err)
+					}
+					enumValue, _ := s.(JavaEnum)
+					num = int64(enumValue)
+				} else {
+					return nil, newCodecError("decInstance->decInt64:"+fldName, err)
+				}
 			}
+
 			fldValue.SetInt(num)
 
 		case kind == reflect.Bool:
@@ -1204,6 +1239,28 @@ func (d *Decoder) getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
 	return s.typ, cls, nil
 }
 
+func (d *Decoder) decEnum(javaName string, flag int32) (JavaEnum, error) {
+	var (
+		err       error
+		enumName  string
+		ok        bool
+		info      structInfo
+		enumValue JavaEnum
+	)
+	enumName, err = d.decString(TAG_READ) // java enum class member is "name"
+	if err != nil {
+		return InvalidJavaEnum, errors.Wrapf(err, "decString for decJavaEnum")
+	}
+	info, ok = getStructInfo(javaName)
+	if !ok {
+		return InvalidJavaEnum, fmt.Errorf("getStructInfo(javaName:%s) = false", javaName)
+	}
+
+	enumValue = info.inst.(POJOEnum).EnumValue(enumName)
+	d.appendRefs(enumValue)
+	return enumValue, nil
+}
+
 func (d *Decoder) decObject(flag int32) (interface{}, error) {
 	var (
 		tag byte
@@ -1228,6 +1285,7 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		cls, _ = clsDef.(classDef)
 		//add to slice
 		d.appendClsDef(cls)
+
 		return d.Decode()
 
 	case tag == BC_OBJECT:
@@ -1240,6 +1298,9 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+		if typ.Implements(javaEnumType) {
+			return d.decEnum(cls.javaName, TAG_READ)
+		}
 
 		return d.decInstance(typ, cls)
 
@@ -1247,6 +1308,9 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		typ, cls, err = d.getStructDefByIndex(int(tag - BC_OBJECT_DIRECT))
 		if err != nil {
 			return nil, err
+		}
+		if typ.Implements(javaEnumType) {
+			return d.decEnum(cls.javaName, TAG_READ)
 		}
 
 		return d.decInstance(typ, cls)
@@ -1266,8 +1330,7 @@ func (d *Decoder) decRef(flag int32) (interface{}, error) {
 	var (
 		err error
 		tag byte
-		buf [4]byte
-		i   int
+		i   int32
 	)
 
 	if flag != TAG_READ {
@@ -1278,16 +1341,12 @@ func (d *Decoder) decRef(flag int32) (interface{}, error) {
 
 	switch {
 	case tag == BC_REF:
-		i, err = d.next(buf[:4])
+		i, err = d.decInt32(TAG_READ)
 		if err != nil {
 			return nil, err
 		}
-		if i != 4 {
-			return nil, ErrNotEnoughBuf
-		}
-		i = int(UnpackInt32(buf[:4])) // ref index
 
-		if len(d.refs) <= i {
+		if len(d.refs) <= int(i) {
 			return nil, ErrIllegalRefIndex
 		}
 		return &d.refs[i], nil

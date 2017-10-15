@@ -6,8 +6,6 @@
 # FILE    : encode.go
 ******************************************************/
 
-// refers to https://github.com/xjing521/gohessian/blob/master/src/gohessian/encode.go
-
 package hessian
 
 import (

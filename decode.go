@@ -776,7 +776,7 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		}
 		// bl := isBuildInType(str)
 		ary := make([]interface{}, size)
-		d.appendRefs(&ary)
+		d.appendRefs(ary)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
 			if err != nil {
@@ -802,7 +802,7 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			size = int(i32)
 		}
 		ary := make([]interface{}, size)
-		d.appendRefs(&ary)
+		d.appendRefs(ary)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
 			if err != nil {
@@ -895,7 +895,7 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 		}
 		if _, ok = checkPOJORegistry(t); ok {
 			m = make(map[interface{}]interface{}) // 此处假设了map的定义形式，这是不对的
-			d.appendRefs(&m)
+			d.appendRefs(m)
 
 			// d.decType() // 忽略
 			for d.peekByte() != byte('z') {
@@ -918,7 +918,7 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 			return m, nil
 		} else {
 			inst = createInstance(t)
-			d.appendRefs(&inst)
+			d.appendRefs(inst)
 
 			for d.peekByte() != 'z' {
 				if key, err = d.Decode(); err != nil {
@@ -947,7 +947,7 @@ func (d *Decoder) decMap(flag int32) (interface{}, error) {
 
 	case tag == BC_MAP_UNTYPED:
 		m = make(map[interface{}]interface{})
-		d.appendRefs(&m)
+		d.appendRefs(m)
 		for d.peekByte() != byte(BC_END) {
 			k, err = d.Decode()
 			if err != nil {

@@ -57,20 +57,6 @@ const (
 const (
 	DEFAULT_LEN        = 8388608 // 8 * 1024 * 1024 default body max length
 	PACKET_DEFAULT_LEN = 131400  // 128 * 1024 default one buf max length
-
-	Response_OK                byte = 20
-	Response_CLIENT_TIMEOUT    byte = 30
-	Response_SERVER_TIMEOUT    byte = 31
-	Response_BAD_REQUEST       byte = 40
-	Response_BAD_RESPONSE      byte = 50
-	Response_SERVICE_NOT_FOUND byte = 60
-	Response_SERVICE_ERROR     byte = 70
-	Response_SERVER_ERROR      byte = 80
-	Response_CLIENT_ERROR      byte = 90
-
-	RESPONSE_WITH_EXCEPTION int32 = 0
-	RESPONSE_VALUE          int32 = 1
-	RESPONSE_NULL_VALUE     int32 = 2
 )
 
 var (
@@ -97,6 +83,8 @@ func getArgType(v interface{}) string {
 		return "S"
 	case uint16: // 相当于Java的Char
 		return "C"
+	// case rune:
+	//	return "C"
 	case int:
 		return "I"
 	case int32:

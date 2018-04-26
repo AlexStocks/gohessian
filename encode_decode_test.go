@@ -122,6 +122,27 @@ func TestEncInt32Len4B(t *testing.T) {
 	t.Logf("decode(%v) = %v, %v\n", v, res, err)
 }
 
+func TestEncInt64Len1BDirect(t *testing.T) {
+	var (
+		v   int64
+		err error
+		e   *Encoder
+		d   *Decoder
+		res interface{}
+	)
+
+	e = NewEncoder()
+	v = 0x1
+	e.Encode(int64(v))
+	if len(e.Buffer()) == 0 {
+		t.Fail()
+	}
+
+	d = NewDecoder(e.Buffer())
+	res, err = d.Decode()
+	t.Logf("decode(int64(%#x)) = %#x, %v\n", v, res, err)
+}
+
 func TestEncInt64Len1B(t *testing.T) {
 	var (
 		v   int64

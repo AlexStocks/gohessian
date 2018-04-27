@@ -265,6 +265,7 @@ func (d *Decoder) decInt32(flag int32) (int32, error) {
 // ::= [xf0-xff] b0          # -x800 to x7ff
 // ::= [x38-x3f] b1 b0       # -x40000 to x3ffff
 // ::= x59 b3 b2 b1 b0       # 32-bit integer cast to long
+// ref: hessian-lite/src/main/java/com/alibaba/com/caucho/hessian/io/Hessian2Input.java:readLong
 func (d *Decoder) decInt64(flag int32) (int64, error) {
 	var (
 		err error
@@ -279,28 +280,87 @@ func (d *Decoder) decInt64(flag int32) (int64, error) {
 	}
 
 	switch {
+	case tag == byte('N'):
+		return int64(0), nil
+
+	case tag == byte('F'):
+		return int64(0), nil
+
+	case tag == byte('T'):
+		return int64(1), nil
+
+		// direct integer
+	case tag >= 0x80 && tag <= 0xbf:
+		return int64(tag - BC_INT_ZERO), nil
+
+		// byte int
+	case tag >= 0xc0 && tag <= 0xcf:
+		if _, err = io.ReadFull(d.reader, buf[:1]); err != nil {
+			return 0, jerrors.Annotate(err, "decInt64 short integer")
+		}
+		return int64(tag-BC_INT_BYTE_ZERO)<<8 + int64(buf[0]), nil
+
+		// short int
+	case tag >= 0xd0 && tag <= 0xd7:
+		if _, err = io.ReadFull(d.reader, buf[:2]); err != nil {
+			return 0, jerrors.Annotate(err, "decInt64 short integer")
+		}
+		return int64(tag-BC_INT_SHORT_ZERO)<<16 + int64(buf[0])<<8 + int64(buf[1]), nil
+
+	case tag == BC_DOUBLE_BYTE:
+		tag, _ = d.readByte()
+		return int64(tag), nil
+
+	case tag == BC_DOUBLE_SHORT:
+		if _, err = io.ReadFull(d.reader, buf[:2]); err != nil {
+			return 0, jerrors.Annotate(err, "decInt64 short integer")
+		}
+
+		return int64(int(buf[0])<<8 + int(buf[1])), nil
+
+	case tag == BC_INT: // 'I'
+		i32, err := d.decInt32(TAG_READ)
+		return int64(i32), err
+
+	case tag == BC_LONG_INT: // x59
+		i32, err := d.decInt32(TAG_READ)
+		return int64(i32), err
+
+		// direct long
 	case tag >= 0xd8 && tag <= 0xef:
 		return int64(tag - BC_LONG_ZERO), nil
 
-	case tag >= 0xf4 && tag <= 0xff:
+		// byte long
+	case tag >= 0xf0 && tag <= 0xff:
 		if _, err = io.ReadFull(d.reader, buf[:1]); err != nil {
 			return 0, jerrors.Annotate(err, "decInt64 short integer")
 		}
 		return int64(tag-BC_LONG_BYTE_ZERO)<<8 + int64(buf[0]), nil
 
-	case tag >= 0x38 && tag <= 0x3f:
+		// short long
+	case tag >= 0x38 && tag <= 0x3f: // ['8',  '?']
 		if _, err := io.ReadFull(d.reader, buf[:2]); err != nil {
 			return 0, jerrors.Annotate(err, "decInt64 short integer")
 		}
 		return int64(tag-BC_LONG_SHORT_ZERO)<<16 + int64(buf[0])<<8 + int64(buf[1]), nil
 		// return int64(tag-BC_LONG_SHORT_ZERO)<<16 + int64(buf[0])*256 + int64(buf[1]), nil
 
-	case tag == BC_LONG:
+	case tag == BC_LONG: // 'L'
 		if _, err := io.ReadFull(d.reader, buf[:8]); err != nil {
 			return 0, jerrors.Annotate(err, "decInt64 parse long")
 		}
 		return int64(buf[0])<<56 + int64(buf[1])<<48 + int64(buf[2])<<40 + int64(buf[3])<<32 +
 			int64(buf[4])<<24 + int64(buf[5])<<16 + int64(buf[6])<<8 + int64(buf[7]), nil
+
+	case tag == BC_DOUBLE_ZERO:
+		return int64(0), nil
+
+	case tag == BC_DOUBLE_ONE:
+		return int64(1), nil
+
+	case tag == BC_DOUBLE_MILL:
+		i64, err := d.decInt32(TAG_READ)
+		return int64(i64), jerrors.Annotate(err, "decInt32")
 
 	default:
 		return 0, jerrors.Errorf("decInt64 long wrong tag:%d-%#x", int(tag), tag)

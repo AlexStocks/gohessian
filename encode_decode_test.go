@@ -6,6 +6,7 @@
 # FILE    : encode_decode_test.go
 ***************************/
 
+//  go test -v  encode_decode_test.go encode.go decode.go codec.go const.go  pojo.go
 package hessian
 
 import (

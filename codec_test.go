@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// go test -v codec_test.go codec.go
+// go test -v  codec_test.go encode.go   const.go  pojo.go codec.go
 // go test -v -run TestPackUint16
 
 func TestPackUint16(t *testing.T) {

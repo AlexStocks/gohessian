@@ -6,7 +6,6 @@
 # FILE    : encode_decode_test.go
 ***************************/
 
-//  go test -v  encode_decode_test.go encode.go decode.go codec.go const.go  pojo.go
 package hessian
 
 import (
@@ -17,7 +16,7 @@ import (
 	"time"
 )
 
-// go test -v  encode_decode_test.go encode.go decode.go const.go codec.go pojo.go
+// go test -v encode_decode_test.go encode.go decode.go const.go codec.go pojo.go
 var assert = func(want, got []byte, t *testing.T) {
 	if !bytes.Equal(want, got) {
 		t.Fatalf("want %v , got %v", want, got)
@@ -376,6 +375,52 @@ func TestEncBinary(t *testing.T) {
 	}
 	t.Logf("decode(%v) = %v, %v, equal:%v\n", v, res, err, bytes.Equal(v, res.([]byte)))
 	assert(v, res.([]byte), t)
+}
+
+func TestEncBinaryShort(t *testing.T) {
+	var (
+		v   [1010]byte
+		err error
+		e   *Encoder
+		d   *Decoder
+		res interface{}
+	)
+
+	for i := 0; i < len(v); i++ {
+		v[i] = byte(i % 123)
+	}
+
+	e = NewEncoder()
+	e.Encode(v[:])
+	d = NewDecoder(e.Buffer())
+	res, err = d.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	assert(v[:], res.([]byte), t)
+}
+
+func TestEncBinaryChunk(t *testing.T) {
+	var (
+		v   [65530]byte
+		err error
+		e   *Encoder
+		d   *Decoder
+		res interface{}
+	)
+
+	for i := 0; i < len(v); i++ {
+		v[i] = byte(i % 123)
+	}
+
+	e = NewEncoder()
+	e.Encode(v[:])
+	d = NewDecoder(e.Buffer())
+	res, err = d.Decode()
+	if err != nil {
+		t.Errorf("Decode() = %v", err)
+	}
+	assert(v[:], res.([]byte), t)
 }
 
 func TestEncList(t *testing.T) {

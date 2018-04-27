@@ -62,6 +62,15 @@ func (e *Encoder) Encode(v interface{}) error {
 	case bool:
 		e.buffer = encBool(v.(bool), e.buffer)
 
+	case int8:
+		e.buffer = encInt32(v.(int32), e.buffer)
+
+	case int16:
+		e.buffer = encInt32(v.(int32), e.buffer)
+
+	case int32:
+		e.buffer = encInt32(v.(int32), e.buffer)
+
 	case int:
 		// if v.(int) >= -2147483648 && v.(int) <= 2147483647 {
 		// 	b = encInt32(int32(v.(int)), b)
@@ -70,9 +79,6 @@ func (e *Encoder) Encode(v interface{}) error {
 		// }
 		// 把int统一按照int64处理，这样才不会导致decode的时候出现" reflect: Call using int32 as type int64 [recovered]"这种panic
 		e.buffer = encInt64(int64(v.(int)), e.buffer)
-
-	case int32:
-		e.buffer = encInt32(v.(int32), e.buffer)
 
 	case int64:
 		e.buffer = encInt64(v.(int64), e.buffer)
@@ -311,10 +317,10 @@ func encString(v string, b []byte) []byte {
 /////////////////////////////////////////
 
 // # 8-bit binary data split into 64k chunks
-// ::= x41 b1 b0 <binary-data> binary # non-final chunk
-// ::= 'B' b1 b0 <binary-data>        # final chunk
-// ::= [x20-x2f] <binary-data>        # binary data of length 0-15
-// ::= [x34-x37] <binary-data>        # binary data of length 0-1023
+// ::= x41(A) b1 b0 <binary-data> binary # non-final chunk
+// ::= x42(B) b1 b0 <binary-data>        # final chunk
+// ::= [x20-x2f] <binary-data>           # binary data of length 0-15
+// ::= [x34-x37] <binary-data>           # binary data of length 0-1023
 func encBinary(v []byte, b []byte) []byte {
 	var (
 		length  uint16
@@ -322,12 +328,12 @@ func encBinary(v []byte, b []byte) []byte {
 	)
 
 	if len(v) == 0 {
-		return encByte(b, BC_BINARY_DIRECT)
+		//return encByte(b, BC_BINARY_DIRECT)
+		return encByte(b, BC_NULL)
 	}
 
 	vLength = len(v)
 	for vLength > 0 {
-		// if vBuf.Len() > CHUNK_SIZE {
 		if vLength > CHUNK_SIZE {
 			length = CHUNK_SIZE
 			b = encByte(b, byte(BC_BINARY_CHUNK), byte(length>>8), byte(length))

@@ -182,7 +182,8 @@ func (d *Decoder) Decode() (interface{}, error) {
 		return d.decString(int32(tag))
 
 		// case 'B', 'b': //binary
-	case (tag == BC_BINARY) || (tag == BC_BINARY_CHUNK) || (tag >= 0x20 && tag <= 0x2f):
+	case (tag == BC_BINARY) || (tag == BC_BINARY_CHUNK) || (tag >= 0x20 && tag <= 0x2f) ||
+		(tag >= BC_BINARY_SHORT && tag <= 0x3f):
 		return d.decBinary(int32(tag))
 
 	// case 'V': //list
@@ -570,13 +571,13 @@ func (d *Decoder) decString(flag int32) (string, error) {
 
 	switch {
 	case tag == byte(BC_NULL):
-		return "null", nil
+		return STRING_NIL, nil
 
 	case tag == byte(BC_TRUE):
-		return "true", nil
+		return STRING_TRUE, nil
 
 	case tag == byte(BC_FALSE):
-		return "false", nil
+		return STRING_FALSE, nil
 
 	case (0x80 <= tag && tag <= 0xbf) || (0xc0 <= tag && tag <= 0xcf) ||
 		(0xd0 <= tag && tag <= 0xd7) || tag == BC_INT ||
@@ -590,10 +591,10 @@ func (d *Decoder) decString(flag int32) (string, error) {
 		return strconv.Itoa(int(i64)), nil
 
 	case tag == byte(BC_DOUBLE_ZERO):
-		return "0.0", nil
+		return STRING_ZERO, nil
 
 	case tag == byte(BC_DOUBLE_ONE):
-		return "1.0", nil
+		return STRING_ONE, nil
 
 	case tag == byte(BC_DOUBLE_BYTE) || tag == byte(BC_DOUBLE_SHORT):
 		f, err := d.decDouble(int32(tag))
@@ -676,32 +677,48 @@ func (d *Decoder) decString(flag int32) (string, error) {
 /////////////////////////////////////////
 
 // # 8-bit binary data split into 64k chunks
-// ::= x41 b1 b0 <binary-data> binary # non-final chunk
-// ::= 'B' b1 b0 <binary-data>        # final chunk
-// ::= [x20-x2f] <binary-data>        # binary data of length 0-15
-// ::= [x34-x37] <binary-data>        # binary data of length 0-1023
+// ::= x41('A') b1 b0 <binary-data> binary # non-final chunk
+// ::= x42('B') b1 b0 <binary-data>        # final chunk
+// ::= [x20-x2f] <binary-data>  # binary data of length 0-15
+// ::= [x34-x37] <binary-data>  # binary data of length 0-1023
 func (d *Decoder) getBinaryLength(tag byte) (int, error) {
 	var (
 		err error
 		buf [2]byte
 	)
 
-	if tag >= BC_BINARY_DIRECT && tag <= INT_DIRECT_MAX {
+	if tag >= BC_BINARY_DIRECT && tag <= INT_DIRECT_MAX { // [0x20, 0x2f]
 		return int(tag - BC_BINARY_DIRECT), nil
 	}
 
-	if _, err = io.ReadFull(d.reader, buf[:2]); err != nil {
-		return 0, jerrors.Annotate(err, "getBinaryLength parse binary")
+	if tag >= BC_BINARY_SHORT && tag <= byte(0x37) { // [0x34, 0x37]
+		_, err = io.ReadFull(d.reader, buf[:1])
+		if err != nil {
+			return 0, jerrors.Annotate(err, "getBinaryLength parse binary, range[0x34, 0x37]")
+		}
+
+		return int(tag-BC_BINARY_SHORT)<<8 + int(buf[0]), nil
 	}
 
-	return int(buf[0]<<8 + buf[1]), nil
+	if tag != BC_BINARY_CHUNK && tag != BC_BINARY {
+		return 0, jerrors.Errorf("illegal binary tag:%d", tag)
+	}
+
+	_, err = io.ReadFull(d.reader, buf[:2])
+	if err != nil {
+		return 0, jerrors.Annotate(err, "getBinaryLength parse binary chunk")
+	}
+
+	return int(buf[0])<<8 + int(buf[1]), nil
 }
 
 func (d *Decoder) decBinary(flag int32) ([]byte, error) {
 	var (
+		err    error
 		tag    byte
-		last   bool
-		length int32
+		length int
+		chunk  [CHUNK_SIZE]byte
+		data   []byte
 	)
 
 	if flag != TAG_READ {
@@ -710,65 +727,34 @@ func (d *Decoder) decBinary(flag int32) ([]byte, error) {
 		tag, _ = d.readBufByte()
 	}
 
-	last = true
-	if (tag >= BC_BINARY_DIRECT && tag <= INT_DIRECT_MAX) ||
-		(tag == BC_BINARY) || (tag == BC_BINARY_CHUNK) {
-		if tag == BC_BINARY_CHUNK {
-			last = false
-		} else {
-			last = true
-		}
-		l, err := d.getBinaryLength(tag)
-		if err != nil {
-			return nil, jerrors.Annotate(err, "decBinary->getBinaryLength")
-		}
-		length = int32(l)
-		data := make([]byte, length)
-		for i := 0; ; {
-			if int32(i) == length {
-				if last {
-					return data, nil
-				}
-
-				var buf [1]byte
-				_, err := io.ReadFull(d.reader, buf[:1])
-				if err != nil {
-					return nil, jerrors.Annotate(err, "decBinary byte1 integer")
-				}
-				b := buf[0]
-				switch {
-				case b == BC_BINARY_CHUNK || b == BC_BINARY:
-					if b == BC_BINARY_CHUNK {
-						last = false
-					} else {
-						last = true
-					}
-					l, err := d.getStrLen(b)
-					if err != nil {
-						return nil, jerrors.Annotate(err, "decBinary getStrLen")
-					}
-					length += l
-					bs := make([]byte, 0, length)
-					copy(bs, data)
-					data = bs
-				default:
-					return nil, jerrors.Annotate(err, "decBinary tag error")
-				}
-			} else {
-				var buf [1]byte
-				_, err := io.ReadFull(d.reader, buf[:1])
-				if err != nil {
-					return nil, jerrors.Annotate(err, "decBinary byte2 integer")
-				}
-				data[i] = buf[0]
-				i++
-			}
-		}
-
-		return data, nil
+	if tag == BC_NULL {
+		return []byte(""), nil
 	}
 
-	return nil, jerrors.Errorf("decBinary byte3 integer")
+	data = make([]byte, 0, CHUNK_SIZE<<1)
+	for tag == BC_BINARY_CHUNK {
+		length, err = d.getBinaryLength(tag)
+		if err != nil || CHUNK_SIZE < length {
+			return nil, jerrors.Annotatef(err, "getBinaryLength(tag:%d) = length:%d", tag, length)
+		}
+		_, err = io.ReadFull(d.reader, chunk[:length])
+		if err != nil {
+			return nil, jerrors.Annotatef(err, "decBinary->io.ReadFull(len:%d)", length)
+		}
+		data = append(data, chunk[:length]...)
+		tag, _ = d.readBufByte()
+	}
+
+	length, err = d.getBinaryLength(tag)
+	if err != nil || CHUNK_SIZE < length {
+		return nil, jerrors.Annotatef(err, "decBinary->getBinaryLength(tag:%d) = length:%d", tag, length)
+	}
+	_, err = io.ReadFull(d.reader, chunk[:length])
+	if err != nil {
+		return nil, jerrors.Annotatef(err, "decBinary->io.ReadFull(len:%d)", length)
+	}
+
+	return append(data, chunk[:length]...), nil
 }
 
 /////////////////////////////////////////
@@ -814,18 +800,18 @@ func (d *Decoder) decSlice(value reflect.Value) (interface{}, error) {
 		i = int(ii)
 	}
 
-	ary := reflect.MakeSlice(value.Type(), i, i)
+	arr := reflect.MakeSlice(value.Type(), i, i)
 	for j := 0; j < i; j++ {
 		it, err := d.Decode()
 		if err != nil {
 			return nil, jerrors.Annotate(err, "decSlice->ReadList")
 		}
-		ary.Index(j).Set(reflect.ValueOf(it))
+		arr.Index(j).Set(reflect.ValueOf(it))
 	}
 	d.readBufByte()
-	value.Set(ary)
+	value.Set(arr)
 
-	return ary, nil
+	return arr, nil
 }
 
 //func isBuildInType(typeName string) bool {
@@ -876,21 +862,21 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			size = int(i32)
 		}
 		// bl := isBuildInType(str)
-		ary := make([]interface{}, size)
-		d.appendRefs(ary)
+		arr := make([]interface{}, size)
+		d.appendRefs(arr)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
 			if err != nil {
 				return nil, jerrors.Annotate(err, "decList->Decode")
 			}
-			ary[j] = it
+			arr[j] = it
 		}
 
 		if tag == BC_LIST_VARIABLE {
 			d.readBufByte()
 		}
 
-		return ary, nil
+		return arr, nil
 
 	case (tag >= BC_LIST_DIRECT_UNTYPED && tag <= 0x7f) || (tag == BC_LIST_FIXED_UNTYPED || tag == BC_LIST_VARIABLE_UNTYPED):
 		if tag >= BC_LIST_DIRECT_UNTYPED && tag <= 0x7f {
@@ -902,21 +888,21 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			}
 			size = int(i32)
 		}
-		ary := make([]interface{}, size)
-		d.appendRefs(ary)
+		arr := make([]interface{}, size)
+		d.appendRefs(arr)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
 			if err != nil {
 				return nil, jerrors.Annotate(err, "decList->Decode")
 			}
-			ary[j] = it
+			arr[j] = it
 		}
 		//read the endbyte of list
 		if tag == BC_LIST_VARIABLE_UNTYPED {
 			d.readBufByte()
 		}
 
-		return ary, nil
+		return arr, nil
 
 	default:
 		return nil, jerrors.Errorf("illegal list type tag:%+v", tag)

@@ -107,6 +107,12 @@ const (
 	ARRAY_FLOAT      = "[float"
 	ARRAY_BOOL       = "[boolean"
 	ARRAY_LONG       = "[long"
+
+	STRING_NIL   = "null"
+	STRING_TRUE  = "true"
+	STRING_FALSE = "false"
+	STRING_ZERO  = "0.0"
+	STRING_ONE   = "1.0"
 )
 
 //x00 - x1f    # utf-8 string length 0-32

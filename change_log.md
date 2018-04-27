@@ -19,6 +19,12 @@
 ---
 - 1 bug fix: encInt64在v值介于 [xd8-xef]   时，应该是 “加上” BC_LONG_ZERO；
 
+
+### 2017-10-16 ###
+---
+- 1 添加解析dubbo response相关代码；
+
+
 ### 2017-10-15 ###
 ---
 - 1 添加dubbo request相关代码；

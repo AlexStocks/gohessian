@@ -85,7 +85,6 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	case RESPONSE_WITH_EXCEPTION:
 		return decoder.Decode()
 	case RESPONSE_VALUE:
-		fmt.Println("start decode response")
 		return decoder.Decode()
 	case RESPONSE_NULL_VALUE:
 		return nil, errors.New("Received null")

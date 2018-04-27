@@ -73,7 +73,7 @@ const (
 	BC_MAP         = byte('M')
 	BC_MAP_UNTYPED = byte('H')
 
-	BC_NULL = byte('N')
+	BC_NULL = byte('N') // x4e
 
 	BC_OBJECT     = byte('O')
 	BC_OBJECT_DEF = byte('C')

@@ -16,6 +16,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -139,69 +140,69 @@ func (d *Decoder) decType() (string, error) {
 func (d *Decoder) Decode() (interface{}, error) {
 	var (
 		err error
-		t   byte
+		tag byte
 	)
 
-	t, err = d.readByte()
+	tag, err = d.readByte()
 	if err == io.EOF {
 		return nil, err
 	}
 	switch {
-	case t == BC_END:
+	case tag == BC_END:
 		return nil, nil
 
-	case t == BC_NULL: // 'N': //null
+	case tag == BC_NULL: // 'N': //null
 		return nil, nil
 
-	case t == BC_TRUE: // 'T': //true
+	case tag == BC_TRUE: // 'T': //true
 		return true, nil
 
-	case t == BC_FALSE: //'F': //false
+	case tag == BC_FALSE: //'F': //false
 		return false, nil
 
-	case (0x80 <= t && t <= 0xbf) || (0xc0 <= t && t <= 0xcf) ||
-		(0xd0 <= t && t <= 0xd7) || t == BC_INT: //'I': //int
-		return d.decInt32(int32(t))
+	case (0x80 <= tag && tag <= 0xbf) || (0xc0 <= tag && tag <= 0xcf) ||
+		(0xd0 <= tag && tag <= 0xd7) || tag == BC_INT: //'I': //int
+		return d.decInt32(int32(tag))
 
-	case (t >= 0xd8 && t <= 0xef) || (t >= 0xf4 && t <= 0xff) ||
-		(t >= 0x38 && t <= 0x3f) || (t == BC_LONG_INT) || (t == BC_LONG): //'L': //long
-		return d.decInt64(int32(t))
+	case (tag >= 0xd8 && tag <= 0xef) || (tag >= 0xf0 && tag <= 0xff) ||
+		(tag >= 0x38 && tag <= 0x3f) || (tag == BC_LONG_INT) || (tag == BC_LONG): //'L': //long
+		return d.decInt64(int32(tag))
 
-	case (t == BC_DATE_MINUTE) || (t == BC_DATE): //'d': //date
-		return d.decDate(int32(t))
+	case (tag == BC_DATE_MINUTE) || (tag == BC_DATE): //'d': //date
+		return d.decDate(int32(tag))
 
-	case (t == BC_DOUBLE_ZERO) || (t == BC_DOUBLE_ONE) || (t == BC_DOUBLE_BYTE) ||
-		(t == BC_DOUBLE_SHORT) || (t == BC_DOUBLE_MILL) || (t == BC_DOUBLE): //'D': //double
-		return d.decDouble(int32(t))
+	case (tag == BC_DOUBLE_ZERO) || (tag == BC_DOUBLE_ONE) || (tag == BC_DOUBLE_BYTE) ||
+		(tag == BC_DOUBLE_SHORT) || (tag == BC_DOUBLE_MILL) || (tag == BC_DOUBLE): //'D': //double
+		return d.decDouble(int32(tag))
 
 	// case 'S', 's', 'X', 'x': //string,xml
-	case (t == BC_STRING_CHUNK || t == BC_STRING) ||
-		(t >= BC_STRING_DIRECT && t <= STRING_DIRECT_MAX) ||
-		(t >= 0x30 && t <= 0x33):
-		return d.decString(int32(t))
+	case (tag == BC_STRING_CHUNK || tag == BC_STRING) ||
+		(tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
+		(tag >= 0x30 && tag <= 0x33):
+		return d.decString(int32(tag))
 
 		// case 'B', 'b': //binary
-	case (t == BC_BINARY) || (t == BC_BINARY_CHUNK) || (t >= 0x20 && t <= 0x2f):
-		return d.decBinary(int32(t))
+	case (tag == BC_BINARY) || (tag == BC_BINARY_CHUNK) || (tag >= 0x20 && tag <= 0x2f):
+		return d.decBinary(int32(tag))
 
 	// case 'V': //list
-	case (t >= BC_LIST_DIRECT && t <= 0x77) || (t == BC_LIST_FIXED || t == BC_LIST_VARIABLE) ||
-		(t >= BC_LIST_DIRECT_UNTYPED && t <= 0x7f) ||
-		(t == BC_LIST_FIXED_UNTYPED || t == BC_LIST_VARIABLE_UNTYPED):
-		return d.decList(int32(t))
+	case (tag >= BC_LIST_DIRECT && tag <= 0x77) || (tag == BC_LIST_FIXED || tag == BC_LIST_VARIABLE) ||
+		(tag >= BC_LIST_DIRECT_UNTYPED && tag <= 0x7f) ||
+		(tag == BC_LIST_FIXED_UNTYPED || tag == BC_LIST_VARIABLE_UNTYPED):
+		return d.decList(int32(tag))
 
-	case (t == BC_MAP) || (t == BC_MAP_UNTYPED):
-		return d.decMap(int32(t))
+	case (tag == BC_MAP) || (tag == BC_MAP_UNTYPED):
+		return d.decMap(int32(tag))
 
-	case (t == BC_OBJECT_DEF) || (t == BC_OBJECT) ||
-		(BC_OBJECT_DIRECT <= t && t <= (BC_OBJECT_DIRECT+OBJECT_DIRECT_MAX)):
-		return d.decObject(int32(t))
+	case (tag == BC_OBJECT_DEF) || (tag == BC_OBJECT) ||
+		(BC_OBJECT_DIRECT <= tag && tag <= (BC_OBJECT_DIRECT+OBJECT_DIRECT_MAX)):
+		return d.decObject(int32(tag))
 
-	case (t == BC_REF): // 'R': //ref, 一个整数，用以指代前面的list 或者 map
-		return d.decRef(int32(t))
+	case (tag == BC_REF): // 'R': //ref, 一个整数，用以指代前面的list 或者 map
+		return d.decRef(int32(tag))
 
 	default:
-		return nil, fmt.Errorf("Invalid type: %v,>>%v<<<", string(t), d.peek(d.len()))
+		return nil, fmt.Errorf("Invalid type: %v,>>%v<<<", string(tag), d.peek(d.len()))
 	}
 }
 
@@ -533,24 +534,25 @@ func getRune(reader io.Reader) (rune, int, error) {
 
 	typ = reflect.TypeOf(reader.(interface{}))
 
-	if (typ == reflect.TypeOf(&bufio.Reader{})) {
+	switch {
+	case typ == reflect.TypeOf(&bufio.Reader{}):
 		byteReader := reader.(interface{}).(*bufio.Reader)
 		return byteReader.ReadRune()
-	}
 
-	if (typ == reflect.TypeOf(&bytes.Buffer{})) {
+	case typ == reflect.TypeOf(&bytes.Buffer{}):
 		byteReader := reader.(interface{}).(*bytes.Buffer)
 		return byteReader.ReadRune()
-	}
 
-	if (typ == reflect.TypeOf(&bytes.Reader{})) {
+	case typ == reflect.TypeOf(&bytes.Reader{}):
 		byteReader := reader.(interface{}).(*bytes.Reader)
 		return byteReader.ReadRune()
-	}
 
-	return runeNil, 0, nil
+	default:
+		return runeNil, 0, nil
+	}
 }
 
+// hessian-lite/src/main/java/com/alibaba/com/caucho/hessian/io/Hessian2Input.java : readString
 func (d *Decoder) decString(flag int32) (string, error) {
 	var (
 		tag    byte
@@ -564,6 +566,45 @@ func (d *Decoder) decString(flag int32) (string, error) {
 		tag = byte(flag)
 	} else {
 		tag, _ = d.readByte()
+	}
+
+	switch {
+	case tag == byte(BC_NULL):
+		return "null", nil
+
+	case tag == byte(BC_TRUE):
+		return "true", nil
+
+	case tag == byte(BC_FALSE):
+		return "false", nil
+
+	case (0x80 <= tag && tag <= 0xbf) || (0xc0 <= tag && tag <= 0xcf) ||
+		(0xd0 <= tag && tag <= 0xd7) || tag == BC_INT ||
+		(tag >= 0xd8 && tag <= 0xef) || (tag >= 0xf0 && tag <= 0xff) ||
+		(tag >= 0x38 && tag <= 0x3f) || (tag == BC_LONG_INT) || (tag == BC_LONG):
+		i64, err := d.decInt64(int32(tag))
+		if err != nil {
+			return "", jerrors.Annotatef(err, "tag:%+v", tag)
+		}
+
+		return strconv.Itoa(int(i64)), nil
+
+	case tag == byte(BC_DOUBLE_ZERO):
+		return "0.0", nil
+
+	case tag == byte(BC_DOUBLE_ONE):
+		return "1.0", nil
+
+	case tag == byte(BC_DOUBLE_BYTE) || tag == byte(BC_DOUBLE_SHORT):
+		f, err := d.decDouble(int32(tag))
+		if err != nil {
+			return "", jerrors.Annotatef(err, "tag:%+v", tag)
+		}
+
+		return strconv.FormatFloat(f.(float64), 'E', -1, 64), nil
+		//var fs string
+		//fmt.Sprintf(fs, "%f", f.(float64))
+		//return fs, nil
 	}
 
 	last = true

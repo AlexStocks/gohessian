@@ -19,6 +19,7 @@ import (
 
 import (
 	"github.com/AlexStocks/goext/strings"
+	jerrors "github.com/juju/errors"
 )
 
 // nil bool int8 int32 int64 float32 float64 time.Time
@@ -426,7 +427,7 @@ func buildMapKey(key reflect.Value, typ reflect.Type) interface{} {
 	}
 
 	// return nil
-	return newCodecError("unsuport key kind " + typ.Kind().String())
+	return jerrors.Errorf("unsuport key kind %s", typ.Kind().String())
 }
 
 func (e *Encoder) encMap(m interface{}) error {

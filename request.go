@@ -18,7 +18,7 @@ import (
 )
 
 import (
-	"github.com/pkg/errors"
+	jerrors "github.com/juju/errors"
 )
 
 /////////////////////////////////////////
@@ -186,7 +186,7 @@ func PackRequest(reqID int64, path, dubboInterface, version, method string, args
 	var err error
 	types, err = getArgsTypeList(args)
 	if err != nil {
-		return nil, errors.Wrapf(err, " PackRequest ")
+		return nil, jerrors.Annotatef(err, " PackRequest(args:%+v)", args)
 	}
 	encoder.Encode(types) //"Ljava/lang/Integer;"
 	for _, v := range args {
@@ -196,8 +196,12 @@ func PackRequest(reqID int64, path, dubboInterface, version, method string, args
 	serviceParams := make(map[string]string)
 	serviceParams["path"] = path
 	serviceParams["interface"] = dubboInterface
-	serviceParams["version"] = version
-	serviceParams["timeout"] = strconv.Itoa(timeout)
+	if len(version) != 0 {
+		serviceParams["version"] = version
+	}
+	if timeout != 0 {
+		serviceParams["timeout"] = strconv.Itoa(timeout)
+	}
 
 	encoder.Encode(serviceParams)
 

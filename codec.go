@@ -105,30 +105,3 @@ func SprintHex(b []byte) (rs string) {
 	rs += fmt.Sprintf("}\n")
 	return
 }
-
-func newCodecError(dataType string, a ...interface{}) error {
-	var (
-		err             error
-		format, message string
-		ok              bool
-	)
-	if len(a) == 0 {
-		return fmt.Errorf(dataType + ": no reason given")
-	}
-	// if last item is error: save it
-	if err, ok = a[len(a)-1].(error); ok {
-		a = a[:len(a)-1] // pop it
-	}
-	// if items left, first ought to be format string
-	if len(a) > 0 {
-		if format, ok = a[0].(string); ok {
-			a = a[1:] // unshift
-			message = fmt.Sprintf(format, a...)
-		}
-	}
-	if message != "" {
-		message = ": " + message
-	}
-
-	return fmt.Errorf("%s: %v", dataType+message, err)
-}

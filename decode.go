@@ -1152,17 +1152,17 @@ func (d *Decoder) decClassDef() (interface{}, error) {
 
 	clsName, err = d.decString(TAG_READ)
 	if err != nil {
-		return nil, jerrors.Annotate(err, "decClassDef->decString")
+		return nil, jerrors.Annotate(err, "decClassDef->decString, to get class name")
 	}
 	fieldNum, err = d.decInt32(TAG_READ)
 	if err != nil {
-		return nil, jerrors.Annotate(err, "decClassDef->decInt32")
+		return nil, jerrors.Annotate(err, "decClassDef->decInt32, to get field num")
 	}
 	fieldList = make([]string, fieldNum)
 	for i := 0; i < int(fieldNum); i++ {
 		fieldName, err = d.decString(TAG_READ)
 		if err != nil {
-			return nil, jerrors.Annotate(err, "decClassDef->decString")
+			return nil, jerrors.Annotatef(err, "decClassDef->decString, filed num:%d, index:%d", fieldNum, i)
 		}
 		fieldList[i] = fieldName
 	}

@@ -13,6 +13,7 @@
 ### 2018-04-27 ###
 ---
 - 1 improvement: pkg/errors -> juju/errors
+- 2 bug fix:  ReflectResponse 中返回值为struct的时候对返回值（reflect.Value）转换为struct 对象
 
 ### 2018-04-26 ###
 ---

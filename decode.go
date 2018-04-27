@@ -494,7 +494,7 @@ func (d *Decoder) decDouble(flag int32) (interface{}, error) {
 // ::= 'S' b1 b0 <utf8-data>         # string of length 0-65535
 // ::= [x00-x1f] <utf8-data>         # string of length 0-31
 // ::= [x30-x34] <utf8-data>         # string of length 0-1023
-func (d *Decoder) getStrLen(tag byte) (int32, error) {
+func (d *Decoder) getStringLength(tag byte) (int32, error) {
 	var (
 		err    error
 		buf    [2]byte
@@ -508,7 +508,7 @@ func (d *Decoder) getStrLen(tag byte) (int32, error) {
 	case tag >= 0x30 && tag <= 0x33:
 		_, err = io.ReadFull(d.reader, buf[:1])
 		if err != nil {
-			return -1, jerrors.Annotate(err, "getStrLen byte4 integer")
+			return -1, jerrors.Annotate(err, "getStringLength byte4 integer")
 		}
 
 		length = int32(tag-0x30)<<8 + int32(buf[0])
@@ -517,13 +517,13 @@ func (d *Decoder) getStrLen(tag byte) (int32, error) {
 	case tag == BC_STRING_CHUNK || tag == BC_STRING:
 		_, err = io.ReadFull(d.reader, buf[:2])
 		if err != nil {
-			return -1, jerrors.Annotate(err, "getStrLen byte5 integer")
+			return -1, jerrors.Annotate(err, "getStringLength byte5 integer")
 		}
 		length = int32(buf[0])<<8 + int32(buf[1])
 		return length, nil
 
 	default:
-		return -1, jerrors.Annotate(err, "getStrLen getStrLen")
+		return -1, jerrors.Annotate(err, "getStringLength getStringLength")
 	}
 }
 
@@ -619,9 +619,9 @@ func (d *Decoder) decString(flag int32) (string, error) {
 			last = true
 		}
 
-		l, err := d.getStrLen(tag)
+		l, err := d.getStringLength(tag)
 		if err != nil {
-			return s, jerrors.Annotate(err, "decString->getStrLen")
+			return s, jerrors.Annotate(err, "decString->getStringLength")
 		}
 		length = l
 		runeDate := make([]rune, length)
@@ -643,9 +643,9 @@ func (d *Decoder) decString(flag int32) (string, error) {
 						last = true
 					}
 
-					l, err := d.getStrLen(b)
+					l, err := d.getStringLength(b)
 					if err != nil {
-						return s, jerrors.Annotate(err, "decString->getStrLen")
+						return s, jerrors.Annotate(err, "decString->getStringLength")
 					}
 					length += l
 					bs := make([]rune, length)

@@ -27,8 +27,8 @@ import (
 // array object struct
 
 type Encoder struct {
-	clsDefList []classDef
-	buffer     []byte
+	classInfoList []classInfo
+	buffer        []byte
 }
 
 func NewEncoder() *Encoder {
@@ -411,34 +411,52 @@ func (e *Encoder) encUntypedMap(m map[interface{}]interface{}) error {
 	return nil
 }
 
-func buildMapKey(key reflect.Value, typ reflect.Type) interface{} {
-	switch typ.Kind() {
-	case reflect.String:
-		return key.String()
+func getMapKey(key reflect.Value, t reflect.Type) (interface{}, error) {
+	switch t.Kind() {
 	case reflect.Bool:
-		return key.Bool()
-	case reflect.Int:
-		return int32(key.Int())
+		return key.Bool(), nil
+
 	case reflect.Int8:
-		return int8(key.Int())
+		return int8(key.Int()), nil
 	case reflect.Int16:
+		return int16(key.Int()), nil
 	case reflect.Int32:
-		return int32(key.Int())
+		return int32(key.Int()), nil
+	case reflect.Int:
+		return int(key.Int()), nil
 	case reflect.Int64:
-		return key.Int()
+		return key.Int(), nil
+
 	case reflect.Uint8:
-		return byte(key.Uint())
-	case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return key.Uint()
+		return byte(key.Uint()), nil
+	case reflect.Uint16:
+		return uint16(key.Uint()), nil
+	case reflect.Uint32:
+		return uint32(key.Uint()), nil
+	case reflect.Uint:
+		return uint(key.Uint()), nil
+	case reflect.Uint64:
+		return key.Uint(), nil
+
+	case reflect.Float32:
+		return float32(key.Float()), nil
+	case reflect.Float64:
+		return float64(key.Float()), nil
+
+	case reflect.Uintptr:
+		return key.UnsafeAddr(), nil
+
+	case reflect.String:
+		return key.String(), nil
 	}
 
-	// return nil
-	return jerrors.Errorf("unsuport key kind %s", typ.Kind().String())
+	return nil, jerrors.Errorf("unsuport map key kind %s", t.Kind().String())
 }
 
 func (e *Encoder) encMap(m interface{}) error {
 	var (
 		err   error
+		k     interface{}
 		typ   reflect.Type
 		value reflect.Value
 		keys  []reflect.Value
@@ -452,9 +470,9 @@ func (e *Encoder) encMap(m interface{}) error {
 	}
 	e.buffer = encByte(e.buffer, BC_MAP_UNTYPED)
 	for i := 0; i < len(keys); i++ {
-		k := buildMapKey(keys[i], typ)
-		if k == nil {
-			return nil
+		k, err = getMapKey(keys[i], typ)
+		if err != nil {
+			return jerrors.Annotatef(err, "getMapKey(idx:%d, key:%+v)", i, keys[i])
 		}
 		if err = e.Encode(k); err != nil {
 			return nil
@@ -544,15 +562,15 @@ func (e *Encoder) encStruct(v POJO) error {
 		idx    int
 		num    int
 		err    error
-		clsDef classDef
+		clsDef classInfo
 	)
 
 	vv := reflect.ValueOf(v)
 
 	// write object definition
 	idx = -1
-	for i = range e.clsDefList {
-		if v.JavaClassName() == e.clsDefList[i].javaName {
+	for i = range e.classInfoList {
+		if v.JavaClassName() == e.classInfoList[i].javaName {
 			idx = i
 			break
 		}
@@ -563,8 +581,8 @@ func (e *Encoder) encStruct(v POJO) error {
 			idx = RegisterPOJO(v)
 		}
 		_, clsDef, _ = getStructDefByIndex(idx)
-		idx = len(e.clsDefList)
-		e.clsDefList = append(e.clsDefList, clsDef)
+		idx = len(e.classInfoList)
+		e.classInfoList = append(e.classInfoList, clsDef)
 		e.buffer = append(e.buffer, clsDef.buffer...)
 	}
 

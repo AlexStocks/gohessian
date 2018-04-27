@@ -26,9 +26,9 @@ import (
 )
 
 type Decoder struct {
-	reader     *bufio.Reader
-	refs       []interface{}
-	clsDefList []classDef
+	reader        *bufio.Reader
+	refs          []interface{}
+	classInfoList []classInfo
 }
 
 var (
@@ -1153,7 +1153,7 @@ func (d *Decoder) decClassDef() (interface{}, error) {
 		fieldList[i] = fieldName
 	}
 
-	return classDef{javaName: clsName, fieldNameList: fieldList}, nil
+	return classInfo{javaName: clsName, fieldNameList: fieldList}, nil
 }
 
 func findField(name string, typ reflect.Type) (int, error) {
@@ -1172,7 +1172,7 @@ func findField(name string, typ reflect.Type) (int, error) {
 	return 0, jerrors.Errorf("failed to find field %s", name)
 }
 
-func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, error) {
+func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, error) {
 	var (
 		i int
 		j int
@@ -1303,22 +1303,22 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classDef) (interface{}, erro
 	return vv, nil
 }
 
-func (d *Decoder) appendClsDef(cd classDef) {
-	d.clsDefList = append(d.clsDefList, cd)
+func (d *Decoder) appendClsDef(cd classInfo) {
+	d.classInfoList = append(d.classInfoList, cd)
 }
 
-func (d *Decoder) getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
+func (d *Decoder) getStructDefByIndex(idx int) (reflect.Type, classInfo, error) {
 	var (
 		ok      bool
 		clsName string
-		cls     classDef
+		cls     classInfo
 		s       structInfo
 	)
 
-	if len(d.clsDefList) <= idx || idx < 0 {
+	if len(d.classInfoList) <= idx || idx < 0 {
 		return nil, cls, jerrors.Errorf("illegal class index @idx %d", idx)
 	}
-	cls = d.clsDefList[idx]
+	cls = d.classInfoList[idx]
 	s, ok = getStructInfo(cls.javaName)
 	if !ok {
 		return nil, cls, jerrors.Errorf("can not find go type name %s in registry", clsName)
@@ -1355,7 +1355,7 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		idx int32
 		err error
 		typ reflect.Type
-		cls classDef
+		cls classInfo
 	)
 
 	if flag != TAG_READ {
@@ -1370,7 +1370,7 @@ func (d *Decoder) decObject(flag int32) (interface{}, error) {
 		if err != nil {
 			return nil, jerrors.Annotate(err, "decObject->decClassDef byte double")
 		}
-		cls, _ = clsDef.(classDef)
+		cls, _ = clsDef.(classInfo)
 		//add to slice
 		d.appendClsDef(cls)
 

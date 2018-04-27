@@ -36,7 +36,7 @@ type JavaEnumClass struct {
 	name string
 }
 
-type classDef struct {
+type classInfo struct {
 	javaName      string
 	fieldNameList []string
 	buffer        []byte // encoded buffer
@@ -46,15 +46,15 @@ type structInfo struct {
 	typ      reflect.Type
 	goName   string
 	javaName string
-	index    int // clsDefList index
+	index    int // classInfoList index
 	inst     interface{}
 }
 
 type POJORegistry struct {
 	sync.RWMutex
-	clsDefList []classDef            // {class name, field name list...} list
-	j2g        map[string]string     // java class name --> go struct name
-	registry   map[string]structInfo // go class name --> go struct info
+	classInfoList []classInfo           // {class name, field name list...} list
+	j2g           map[string]string     // java class name --> go struct name
+	registry      map[string]structInfo // go class name --> go struct info
 }
 
 var (
@@ -90,7 +90,7 @@ func RegisterPOJO(o POJO) int {
 		f  string
 		l  []string
 		t  structInfo
-		c  classDef
+		c  classInfo
 		v  reflect.Value
 	)
 
@@ -123,10 +123,10 @@ func RegisterPOJO(o POJO) int {
 			b = encString(f, b)
 		}
 
-		c = classDef{javaName: t.javaName, fieldNameList: l}
+		c = classInfo{javaName: t.javaName, fieldNameList: l}
 		c.buffer = append(c.buffer, b[:]...)
-		t.index = len(pojoRegistry.clsDefList)
-		pojoRegistry.clsDefList = append(pojoRegistry.clsDefList, c)
+		t.index = len(pojoRegistry.classInfoList)
+		pojoRegistry.classInfoList = append(pojoRegistry.classInfoList, c)
 		pojoRegistry.registry[t.goName] = t
 		i = t.index
 	} else {
@@ -146,7 +146,7 @@ func RegisterJavaEnum(o POJOEnum) int {
 		f  string
 		l  []string
 		t  structInfo
-		c  classDef
+		c  classInfo
 		v  reflect.Value
 	)
 
@@ -177,10 +177,10 @@ func RegisterJavaEnum(o POJOEnum) int {
 		l = append(l, f)
 		b = encString(f, b)
 
-		c = classDef{javaName: t.javaName, fieldNameList: l}
+		c = classInfo{javaName: t.javaName, fieldNameList: l}
 		c.buffer = append(c.buffer, b[:]...)
-		t.index = len(pojoRegistry.clsDefList)
-		pojoRegistry.clsDefList = append(pojoRegistry.clsDefList, c)
+		t.index = len(pojoRegistry.classInfoList)
+		pojoRegistry.classInfoList = append(pojoRegistry.classInfoList, c)
 		pojoRegistry.registry[t.goName] = t
 		i = t.index
 	} else {
@@ -221,21 +221,21 @@ func getStructInfo(javaName string) (structInfo, bool) {
 	return s, ok
 }
 
-func getStructDefByIndex(idx int) (reflect.Type, classDef, error) {
+func getStructDefByIndex(idx int) (reflect.Type, classInfo, error) {
 	var (
 		ok      bool
 		clsName string
-		cls     classDef
+		cls     classInfo
 		s       structInfo
 	)
 
 	pojoRegistry.RLock()
 	defer pojoRegistry.RUnlock()
 
-	if len(pojoRegistry.clsDefList) <= idx || idx < 0 {
+	if len(pojoRegistry.classInfoList) <= idx || idx < 0 {
 		return nil, cls, fmt.Errorf("illegal class index @idx %d", idx)
 	}
-	cls = pojoRegistry.clsDefList[idx]
+	cls = pojoRegistry.classInfoList[idx]
 	clsName = pojoRegistry.j2g[cls.javaName]
 	s, ok = pojoRegistry.registry[clsName]
 	if !ok {

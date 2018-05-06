@@ -136,7 +136,7 @@ func getArgsTypeList(args []interface{}) (string, error) {
 	for i := range args {
 		typ = getArgType(args[i])
 		if typ == "" {
-			return types, fmt.Errorf("cat not get arg %#v type", args[i])
+			return types, jerrors.Errorf("cat not get arg %#v type", args[i])
 		}
 		if !strings.Contains(typ, ".") {
 			types += typ
@@ -209,7 +209,7 @@ func PackRequest(reqID int64, path, dubboInterface, version, method string, args
 	encBufLen := len(encBuf)
 	// header{body length}
 	if encBufLen > int(DEFAULT_LEN) { // 8M
-		return nil, fmt.Errorf("Data length %d too large, max payload %d", encBufLen, DEFAULT_LEN)
+		return nil, jerrors.Errorf("Data length %d too large, max payload %d", encBufLen, DEFAULT_LEN)
 	}
 	binary.BigEndian.PutUint32(encBuf[12:], uint32(encBufLen-HEADER_LENGTH))
 

@@ -17,6 +17,10 @@ import (
 	"reflect"
 )
 
+import (
+	jerrors "github.com/juju/errors"
+)
+
 const (
 	Response_OK                byte = 20
 	Response_CLIENT_TIMEOUT    byte = 30
@@ -34,7 +38,7 @@ const (
 )
 
 var (
-	ErrIllegalPackage = fmt.Errorf("illegal pacakge!")
+	ErrIllegalPackage = jerrors.Errorf("illegal pacakge!")
 )
 
 // hessian decode respone
@@ -47,24 +51,24 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	// Header{serialization id(5 bit), event, two way, req/response}
 	var serialID byte = buf[2] & SERIALIZATION_MASK
 	if serialID == byte(0x00) {
-		return nil, fmt.Errorf("serialization ID:%v", serialID)
+		return nil, jerrors.Errorf("serialization ID:%v", serialID)
 	}
 	//var eventFlag byte = buf[2] & FLAG_EVENT
 	//if eventFlag == byte(0x00) {
-	//	return nil, fmt.Errorf("event flag:%v", eventFlag)
+	//	return nil, jerrors.Errorf("event flag:%v", eventFlag)
 	//}
 	//var twoWayFlag byte = buf[2] & FLAG_TWOWAY
 	//if twoWayFlag == byte(0x00) {
-	//	return nil, fmt.Errorf("twoway flag:%v", twoWayFlag)
+	//	return nil, jerrors.Errorf("twoway flag:%v", twoWayFlag)
 	//}
 	var rspFlag byte = buf[2] & FLAG_REQUEST
 	if rspFlag != byte(0x00) {
-		return nil, fmt.Errorf("response flag:%v", rspFlag)
+		return nil, jerrors.Errorf("response flag:%v", rspFlag)
 	}
 
 	// Header{status}
 	if buf[3] != Response_OK {
-		return nil, fmt.Errorf("Response not OK, java exception:%s", string(buf[18:length-1]))
+		return nil, jerrors.Errorf("Response not OK, java exception:%s", string(buf[18:length-1]))
 	}
 
 	// Header{req id}

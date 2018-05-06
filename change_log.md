@@ -10,6 +10,12 @@
 ---
 *本项目其实是从2016/10/21开始进行改造测试的工作了，但2016/10/28才上传到github上，所以dev list只能从29号开始记了*
 
+
+### 2018-05-07 ###
+---
+- 1 fmt.Errorf -> juju/errors.Errorf
+
+
 ### 2018-04-27 ###
 ---
 - 1 improvement: pkg/errors -> juju/errors

@@ -15,6 +15,10 @@ import (
 	"sync"
 )
 
+import (
+	jerrors "github.com/juju/errors"
+)
+
 const (
 	InvalidJavaEnum JavaEnum = -1
 )
@@ -233,13 +237,13 @@ func getStructDefByIndex(idx int) (reflect.Type, classInfo, error) {
 	defer pojoRegistry.RUnlock()
 
 	if len(pojoRegistry.classInfoList) <= idx || idx < 0 {
-		return nil, cls, fmt.Errorf("illegal class index @idx %d", idx)
+		return nil, cls, jerrors.Errorf("illegal class index @idx %d", idx)
 	}
 	cls = pojoRegistry.classInfoList[idx]
 	clsName = pojoRegistry.j2g[cls.javaName]
 	s, ok = pojoRegistry.registry[clsName]
 	if !ok {
-		return nil, cls, fmt.Errorf("can not find go type name %s in registry", clsName)
+		return nil, cls, jerrors.Errorf("can not find go type name %s in registry", clsName)
 	}
 
 	return s.typ, cls, nil

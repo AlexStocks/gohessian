@@ -114,14 +114,14 @@ func (e *Encoder) Encode(v interface{}) error {
 			if p, ok := v.(POJO); ok {
 				return e.encStruct(p)
 			} else {
-				return fmt.Errorf("struct type not Support! %s is not a instance of POJO", t.Kind().String())
+				return jerrors.Errorf("struct type not Support! %s is not a instance of POJO", t.Kind().String())
 			}
 		case reflect.Slice, reflect.Array:
 			return e.encUntypedList(v)
 		case reflect.Map: // 进入这个case，就说明map可能是map[string]int这种类型
 			return e.encMap(v)
 		default:
-			return fmt.Errorf("type not Support! %s", t.Kind().String())
+			return jerrors.Errorf("type not Support! %s", t.Kind().String())
 		}
 	}
 

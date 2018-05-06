@@ -32,8 +32,8 @@ type Decoder struct {
 }
 
 var (
-	ErrNotEnoughBuf    = fmt.Errorf("not enough buf")
-	ErrIllegalRefIndex = fmt.Errorf("illegal ref index")
+	ErrNotEnoughBuf    = jerrors.Errorf("not enough buf")
+	ErrIllegalRefIndex = jerrors.Errorf("illegal ref index")
 )
 
 func NewDecoder(b []byte) *Decoder {
@@ -203,7 +203,7 @@ func (d *Decoder) Decode() (interface{}, error) {
 		return d.decRef(int32(tag))
 
 	default:
-		return nil, fmt.Errorf("Invalid type: %v,>>%v<<<", string(tag), d.peek(d.len()))
+		return nil, jerrors.Errorf("Invalid type: %v,>>%v<<<", string(tag), d.peek(d.len()))
 	}
 }
 
@@ -420,7 +420,7 @@ func (d *Decoder) decDate(flag int32) (time.Time, error) {
 		return time.Unix(i64*60, 0), nil
 
 	default:
-		return t, fmt.Errorf("decDate Invalid type: %v", tag)
+		return t, jerrors.Errorf("decDate Invalid type: %v", tag)
 	}
 }
 

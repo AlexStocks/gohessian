@@ -10,7 +10,6 @@ package hessian
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"reflect"
 	"time"

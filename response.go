@@ -13,7 +13,6 @@ package hessian
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"reflect"
 )
 

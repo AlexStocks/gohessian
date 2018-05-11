@@ -10,7 +10,6 @@ package hessian
 
 import (
 	"encoding/binary"
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"

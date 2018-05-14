@@ -782,56 +782,6 @@ func (d *Decoder) readBufByte() (byte, error) {
 	return buf[0], nil
 }
 
-func (d *Decoder) decSlice(value reflect.Value) (interface{}, error) {
-	var (
-		i   int
-		tag byte
-	)
-
-	tag, _ = d.readBufByte()
-	if tag >= BC_LIST_DIRECT_UNTYPED && tag <= 0x7f {
-		i = int(tag - BC_LIST_DIRECT_UNTYPED)
-	} else {
-		ii, err := d.decInt32(TAG_READ)
-		if err != nil {
-			return nil, jerrors.Annotate(err, "decSlice->decInt32")
-		}
-		i = int(ii)
-	}
-
-	arr := reflect.MakeSlice(value.Type(), i, i)
-	for j := 0; j < i; j++ {
-		it, err := d.Decode()
-		if err != nil {
-			return nil, jerrors.Annotate(err, "decSlice->ReadList")
-		}
-		arr.Index(j).Set(reflect.ValueOf(it))
-	}
-	d.readBufByte()
-	value.Set(arr)
-
-	return arr, nil
-}
-
-//func isBuildInType(typeName string) bool {
-//	switch typeName {
-//	case ARRAY_STRING:
-//		return true
-//	case ARRAY_INT:
-//		return true
-//	case ARRAY_FLOAT:
-//		return true
-//	case ARRAY_DOUBLE:
-//		return true
-//	case ARRAY_BOOL:
-//		return true
-//	case ARRAY_LONG:
-//		return true
-//	default:
-//		return false
-//	}
-//}
-
 func (d *Decoder) decList(flag int32) (interface{}, error) {
 	var (
 		tag  byte
@@ -846,10 +796,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 
 	switch {
 	case (tag >= BC_LIST_DIRECT && tag <= 0x77) || (tag == BC_LIST_FIXED || tag == BC_LIST_VARIABLE):
-		// str, err := d.decType()
-		// if err != nil {
-		// 	return nil, jerrors.Annotate(err,"ReadType", err)
-		// }
 		d.decType() // 忽略
 		if tag >= BC_LIST_DIRECT && tag <= 0x77 {
 			size = int(tag - BC_LIST_DIRECT)
@@ -860,7 +806,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			}
 			size = int(i32)
 		}
-		// bl := isBuildInType(str)
 		arr := make([]interface{}, size)
 		d.appendRefs(arr)
 		for j := 0; j < size; j++ {

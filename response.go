@@ -113,14 +113,8 @@ func ReflectResponse(rsp interface{}, rspType reflect.Type) interface{} {
 		return rsp.(int32)
 	case reflect.Int64:
 		return rsp.(int64)
-	//case reflect.Uint8: // of no usage, just list here
-	//	return rsp.(uint8)
 	case reflect.Uint16:
 		return rsp.(uint16)
-	//case reflect.Uint32:
-	//	return rsp.(uint32)
-	//case reflect.Uint64:
-	//	return rsp.(uint64)
 	case reflect.Float32:
 		return rsp.(float32)
 	case reflect.Float64:
@@ -135,14 +129,14 @@ func ReflectResponse(rsp interface{}, rspType reflect.Type) interface{} {
 		//for i:=0;i<len(ind);i++{
 		//	retArray[0][i]=ind[i].(reflect.Value).Elem().Interface()
 		//}
-		var retArray []interface{} = make([]interface{}, len(array))
+		var retArray = make([]interface{}, len(array))
 		for i := 0; i < len(array); i++ {
 			retArray[i] = array[i].(reflect.Value).Elem().Interface()
 		}
 		return retArray
 	case reflect.Map:
 		m := rsp.(map[interface{}]interface{})
-		var retMap map[interface{}]interface{} = make(map[interface{}]interface{}, len(m))
+		var retMap = make(map[interface{}]interface{}, len(m))
 		for k, v := range m {
 			vv := v.(reflect.Value).Elem().Interface()
 			retMap[k] = vv

@@ -12,7 +12,6 @@ package hessian
 
 import (
 	"encoding/binary"
-	"errors"
 	"reflect"
 )
 
@@ -141,7 +140,7 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	case RESPONSE_VALUE:
 		return decoder.Decode()
 	case RESPONSE_NULL_VALUE:
-		return nil, errors.New("Received null")
+		return nil, jerrors.New("Received null")
 	}
 
 	return nil, nil

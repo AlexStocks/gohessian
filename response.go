@@ -18,6 +18,7 @@ import (
 
 import (
 	jerrors "github.com/juju/errors"
+	"paipai.cn/protodef/FriendsBaseStruct"
 )
 
 const (
@@ -39,6 +40,61 @@ const (
 var (
 	ErrIllegalPackage = jerrors.Errorf("illegal pacakge!")
 )
+
+// reflect return value
+func ReflectResponse(rsp interface{}, rspType reflect.Type) interface{} {
+	if rsp == nil {
+		return nil
+	}
+
+	switch rspType.Kind() {
+	case reflect.Bool:
+		return rsp.(bool)
+	case reflect.Int8:
+		return rsp.(int8)
+	case reflect.Int16:
+		return rsp.(int16)
+	case reflect.Int32:
+		return rsp.(int32)
+	case reflect.Int64:
+		return rsp.(int64)
+	case reflect.Uint16:
+		return rsp.(uint16)
+	case reflect.Float32:
+		return rsp.(float32)
+	case reflect.Float64:
+		return rsp.(float64)
+	case reflect.String:
+		return rsp.(string)
+	case reflect.Ptr:
+		return rsp.(reflect.Value).Elem().Interface()
+	case reflect.Slice, reflect.Array:
+		//array := rsp.([]interface{})
+		//retArray := reflect.MakeSlice(reflect.SliceOf(rspType), len(ind), len(ind)).Interface().([][]interface{})
+		//for i:=0;i<len(ind);i++{
+		//	retArray[0][i]=ind[i].(reflect.Value).Elem().Interface()
+		//}
+
+		//var retArray = make([]interface{}, len(array))
+		//for i := 0; i < len(array); i++ {
+		//	retArray[i] = array[i].(reflect.Value).Elem().Interface()
+		//}
+		//return retArray
+		//
+	case reflect.Map:
+		m := rsp.(map[interface{}]interface{})
+		var retMap = make(map[interface{}]interface{}, len(m))
+		for k, v := range m {
+			vv := v.(reflect.Value).Elem().Interface()
+			retMap[k] = vv
+		}
+		return retMap
+	case reflect.Struct:
+		return rsp.(reflect.Value).Elem().Interface()
+	}
+
+	return nil
+}
 
 // hessian decode respone
 func UnpackResponse(buf []byte) (interface{}, error) {
@@ -97,53 +153,58 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 }
 
 // reflect return value
-func ReflectResponse(rsp interface{}, rspType reflect.Type) interface{} {
+func ReflectResponse2(rsp interface{}, ret interface{}) error {
 	if rsp == nil {
-		return nil
+		return jerrors.Errorf("@rsp is nil")
 	}
 
+	if ret == nil {
+		return jerrors.Errorf("@ret is nil")
+	}
+
+	rspType := reflect.TypeOf(rsp)
 	switch rspType.Kind() {
 	case reflect.Bool:
-		return rsp.(bool)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(bool)))
 	case reflect.Int8:
-		return rsp.(int8)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int8)))
 	case reflect.Int16:
-		return rsp.(int16)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int16)))
 	case reflect.Int32:
-		return rsp.(int32)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int32)))
 	case reflect.Int64:
-		return rsp.(int64)
-	case reflect.Uint16:
-		return rsp.(uint16)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int64)))
 	case reflect.Float32:
-		return rsp.(float32)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(float32)))
 	case reflect.Float64:
-		return rsp.(float64)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(float64)))
 	case reflect.String:
-		return rsp.(string)
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(string)))
 	case reflect.Ptr:
-		return rsp.(reflect.Value).Elem().Interface()
-	case reflect.Slice, reflect.Array:
-		array := rsp.([]interface{})
-		//retArray := reflect.MakeSlice(reflect.SliceOf(rspType), len(ind), len(ind)).Interface().([][]interface{})
-		//for i:=0;i<len(ind);i++{
-		//	retArray[0][i]=ind[i].(reflect.Value).Elem().Interface()
-		//}
-		var retArray = make([]interface{}, len(array))
-		for i := 0; i < len(array); i++ {
-			retArray[i] = array[i].(reflect.Value).Elem().Interface()
-		}
-		return retArray
-	case reflect.Map:
-		m := rsp.(map[interface{}]interface{})
-		var retMap = make(map[interface{}]interface{}, len(m))
-		for k, v := range m {
-			vv := v.(reflect.Value).Elem().Interface()
-			retMap[k] = vv
-		}
-		return retMap
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(reflect.Value).Elem().Interface()))
 	case reflect.Struct:
-		return rsp.(reflect.Value).Elem().Interface()
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(reflect.Value).Elem().Interface()))
+	case reflect.Slice, reflect.Array:
+		retType := reflect.TypeOf(ret).Elem().Elem()
+		array := rsp.([]interface{})
+		retArray := reflect.MakeSlice(
+			reflect.SliceOf(retType),
+			len(array),
+			len(array),
+		)
+		for i := 0; i < len(array); i++ {
+			reflect.ValueOf(retArray[i]).Set()
+			retArray[i] = array[i].(reflect.Value).Elem()
+		}
+
+		//case reflect.Map:
+		//	m := rsp.(map[interface{}]interface{})
+		//	var retMap = make(map[interface{}]interface{}, len(m))
+		//	for k, v := range m {
+		//		vv := v.(reflect.Value).Elem().Interface()
+		//		retMap[k] = vv
+		//	}
+		//	return retMap
 	}
 
 	return nil

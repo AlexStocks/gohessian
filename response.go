@@ -17,8 +17,8 @@ import (
 )
 
 import (
+	"fmt"
 	jerrors "github.com/juju/errors"
-	"paipai.cn/protodef/FriendsBaseStruct"
 )
 
 const (
@@ -69,18 +69,13 @@ func ReflectResponse(rsp interface{}, rspType reflect.Type) interface{} {
 	case reflect.Ptr:
 		return rsp.(reflect.Value).Elem().Interface()
 	case reflect.Slice, reflect.Array:
-		//array := rsp.([]interface{})
-		//retArray := reflect.MakeSlice(reflect.SliceOf(rspType), len(ind), len(ind)).Interface().([][]interface{})
-		//for i:=0;i<len(ind);i++{
-		//	retArray[0][i]=ind[i].(reflect.Value).Elem().Interface()
-		//}
+		array := rsp.([]interface{})
+		var retArray = make([]interface{}, len(array))
+		for i := 0; i < len(array); i++ {
+			retArray[i] = array[i].(reflect.Value).Elem().Interface()
+		}
+		return retArray
 
-		//var retArray = make([]interface{}, len(array))
-		//for i := 0; i < len(array); i++ {
-		//	retArray[i] = array[i].(reflect.Value).Elem().Interface()
-		//}
-		//return retArray
-		//
 	case reflect.Map:
 		m := rsp.(map[interface{}]interface{})
 		var retMap = make(map[interface{}]interface{}, len(m))
@@ -152,6 +147,36 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	return nil, nil
 }
 
+func cpSlice(in, out interface{}) {
+	fmt.Printf("@in %T, %v\n", in, in)
+	fmt.Printf("@out %T, %v\n", out, out)
+	inValue := reflect.ValueOf(in)
+	if inValue.Kind() == reflect.Ptr {
+		inValue = inValue.Elem()
+	}
+	for i := 0; i < inValue.Len(); i++ {
+		fmt.Printf("idx:%v, type:%s, value:", i, inValue.Index(i).Type().Name())
+		fmt.Println(inValue.Index(i).Elem())
+	}
+
+	outValue := reflect.ValueOf(out)
+	if outValue.Kind() == reflect.Ptr {
+		outValue = outValue.Elem()
+	}
+
+	outValue.Set(reflect.MakeSlice(outValue.Type(), inValue.Len(), inValue.Len()))
+	outElemKind := outValue.Type().Elem().Kind()
+	for i := 0; i < outValue.Len(); i++ {
+		value := inValue.Index(i)
+		if value.Kind() != outElemKind {
+			value = value.Elem()
+		}
+		outValue.Index(i).Set(value)
+		//reflect.ValueOf(outValue.Index(i)).Elem().Set(reflect.ValueOf(value.Interface()))
+		//reflect.ValueOf(outValue.Index(i)).Set(reflect.ValueOf(value.Interface()))
+	}
+}
+
 // reflect return value
 func ReflectResponse2(rsp interface{}, ret interface{}) error {
 	if rsp == nil {
@@ -160,6 +185,9 @@ func ReflectResponse2(rsp interface{}, ret interface{}) error {
 
 	if ret == nil {
 		return jerrors.Errorf("@ret is nil")
+	}
+	if reflect.TypeOf(ret).Kind() != reflect.Ptr {
+		return jerrors.Errorf("@ret should be a pointer")
 	}
 
 	rspType := reflect.TypeOf(rsp)
@@ -185,17 +213,7 @@ func ReflectResponse2(rsp interface{}, ret interface{}) error {
 	case reflect.Struct:
 		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(reflect.Value).Elem().Interface()))
 	case reflect.Slice, reflect.Array:
-		retType := reflect.TypeOf(ret).Elem().Elem()
-		array := rsp.([]interface{})
-		retArray := reflect.MakeSlice(
-			reflect.SliceOf(retType),
-			len(array),
-			len(array),
-		)
-		for i := 0; i < len(array); i++ {
-			reflect.ValueOf(retArray[i]).Set()
-			retArray[i] = array[i].(reflect.Value).Elem()
-		}
+		cpSlice(rsp, ret)
 
 		//case reflect.Map:
 		//	m := rsp.(map[interface{}]interface{})

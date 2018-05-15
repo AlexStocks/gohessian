@@ -102,6 +102,36 @@ func (d *Decoder) nextRune(s []rune) []rune {
 	return s
 }
 
+func (d *Decoder) decListType() (string, reflect.Type, error) {
+	var (
+		err error
+		arr [1]byte
+		buf []byte
+		tag byte
+		idx int32
+		tn  string
+		typ reflect.Type
+	)
+
+	buf = arr[:1]
+	if _, err = io.ReadFull(d.reader, buf); err != nil {
+		return tn, typ, jerrors.Annotate(err, "decType reading tag")
+	}
+	tag = buf[0]
+	if (tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
+		(tag >= 0x30 && tag <= 0x33) || (tag == BC_STRING) || (tag == BC_STRING_CHUNK) {
+		tn, err = d.decString(int32(tag))
+		return tn, typ, err
+	}
+
+	if idx, err = d.decInt32(TAG_READ); err != nil {
+		return tn, typ, jerrors.Trace(err)
+	}
+
+	typ, _, err = d.getStructDefByIndex(int(idx))
+	return tn, typ, jerrors.Trace(err)
+}
+
 // 读取数据类型描述,用于 list 和 map
 func (d *Decoder) decType() (string, error) {
 	var (
@@ -602,9 +632,6 @@ func (d *Decoder) decString(flag int32) (string, error) {
 		}
 
 		return strconv.FormatFloat(f.(float64), 'E', -1, 64), nil
-		//var fs string
-		//fmt.Sprintf(fs, "%f", f.(float64))
-		//return fs, nil
 	}
 
 	last = true

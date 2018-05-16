@@ -16,7 +16,6 @@ import (
 )
 
 import (
-	"fmt"
 	jerrors "github.com/juju/errors"
 )
 
@@ -97,6 +96,10 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 
 func cpSlice(in, out interface{}) {
 	inValue := reflect.ValueOf(in)
+	if inValue.IsNil() {
+		panic("@in is nil")
+		return
+	}
 
 	outValue := reflect.ValueOf(out)
 	if outValue.Kind() == reflect.Ptr {
@@ -106,23 +109,27 @@ func cpSlice(in, out interface{}) {
 	outValue.Set(reflect.MakeSlice(outValue.Type(), inValue.Len(), inValue.Len()))
 	outElemKind := outValue.Type().Elem().Kind()
 	for i := 0; i < outValue.Len(); i++ {
-		valueI := inValue.Index(i).Interface().(reflect.Value)
-		if valueI.Kind() == reflect.Ptr && valueI.Kind() != outElemKind {
-			valueI = valueI.Elem()
+		valueI := inValue.Index(i)
+		if outValue.Index(i).Kind() == reflect.Struct {
+			if valueI.Kind() == reflect.Ptr && valueI.Kind() != outElemKind {
+				valueI = valueI.Elem()
+			}
+			valueI = valueI.Interface().(reflect.Value)
 		}
-
-		outValue.Index(i).Set(valueI)
+		if valueI.Type().AssignableTo(outValue.Index(i).Type()) {
+			outValue.Index(i).Set(valueI)
+		} else {
+			panic(jerrors.Errorf("in element type %s can not assign to out element type %s",
+				valueI.Type().Name(), outValue.Type().Name()))
+		}
 	}
 }
 
 func cpMap(in, out interface{}) {
 	inValue := reflect.ValueOf(in)
-	if inValue.Kind() == reflect.Ptr {
-		inValue = inValue.Elem()
-	}
-	for i := 0; i < inValue.Len(); i++ {
-		fmt.Printf("idx:%v, type:%s, value:", i, inValue.Index(i).Type().Name())
-		fmt.Println(inValue.Index(i).Elem())
+	if inValue.IsNil() {
+		panic("@in is nil")
+		return
 	}
 
 	outValue := reflect.ValueOf(out)
@@ -130,17 +137,29 @@ func cpMap(in, out interface{}) {
 		outValue = outValue.Elem()
 	}
 
-	outValue.Set(reflect.MakeSlice(outValue.Type(), inValue.Len(), inValue.Len()))
-	outElemKind := outValue.Type().Elem().Kind()
-	for i := 0; i < outValue.Len(); i++ {
-		value := inValue.Index(i)
-		fmt.Printf("value kind:%#v %s, out elem kind:%#v %s\n", value.Kind(), value.Kind(), outElemKind, outElemKind)
-		if value.Kind() != outElemKind {
-			value = value.Elem()
+	outValue.Set(reflect.MakeMap(outValue.Type()))
+	// TODO: get map key kind
+	// outKeyKind := outValue.Type().Elem().Kind()
+	// TODO: get map value kind
+	// outValueKind := outValue.Type().Elem().Kind()
+	for _, key := range inValue.MapKeys() {
+		mapKey := inValue.MapIndex(key)
+		mapValue := inValue.MapIndex(mapKey)
+		if mapKey.Kind() == reflect.Ptr {
+			mapKey = mapKey.Elem()
+		}
+		if mapKey.Kind() == reflect.Struct {
+			mapKey = mapKey.Interface().(reflect.Value)
 		}
 
-		//reflect.ValueOf(outValue.Index(i)).Set(value)  // panic: reflect: reflect.Value.Set using unaddressable value
-		outValue.Index(i).Set(value) // panic: reflect.Set: value of type reflect.Value is not assignable to type main.User
+		if mapValue.Kind() == reflect.Ptr {
+			mapValue = mapValue.Elem()
+		}
+		if mapValue.Kind() == reflect.Struct {
+			mapValue = mapValue.Interface().(reflect.Value)
+		}
+
+		outValue.SetMapIndex(mapKey, mapValue)
 	}
 }
 

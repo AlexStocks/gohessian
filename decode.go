@@ -12,7 +12,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"reflect"
@@ -120,7 +119,6 @@ func (d *Decoder) decType() (string, error) {
 		return "", jerrors.Trace(err)
 	}
 	tag = buf[0]
-	fmt.Printf("list type :%#X\n", tag)
 	if (tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
 		(tag >= 0x30 && tag <= 0x33) || (tag == BC_STRING) || (tag == BC_STRING_CHUNK) {
 		return d.decString(int32(tag))
@@ -840,8 +838,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		d.appendRefs(arr)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
-			fmt.Printf("idx:%d, obj:%T %#v\n", j, it, it)
-			fmt.Println("it###:", it)
 			if err != nil {
 				return nil, jerrors.Trace(err)
 			}
@@ -852,8 +848,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			d.readBufByte()
 		}
 
-		fmt.Println("array###:", arr)
-		fmt.Println("array[0]###:", arr[0])
 		return arr, nil
 
 	default:
@@ -1251,9 +1245,6 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 		}
 	}
 
-	fmt.Println("vRef name:", vRef.Type().Name())
-	fmt.Println("vRef value:", vRef)
-	//return vPtr, nil
 	return vRef, nil
 }
 

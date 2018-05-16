@@ -76,7 +76,6 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 
 	// Header{body len}
 	var bodyLen = int32(binary.BigEndian.Uint32(buf[12:]))
-	//fmt.Printf("response package body length:%d\n", bodyLen)
 	if int(bodyLen+HEADER_LENGTH) != length {
 		return nil, ErrIllegalPackage
 	}
@@ -98,8 +97,6 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 
 func cpSlice(in, out interface{}) {
 	inValue := reflect.ValueOf(in)
-	fmt.Println("$$", inValue)
-	fmt.Println("$$", inValue.Type())
 
 	outValue := reflect.ValueOf(out)
 	if outValue.Kind() == reflect.Ptr {
@@ -110,30 +107,11 @@ func cpSlice(in, out interface{}) {
 	outElemKind := outValue.Type().Elem().Kind()
 	for i := 0; i < outValue.Len(); i++ {
 		valueI := inValue.Index(i).Interface().(reflect.Value)
-		fmt.Println(i, "#### in value:", valueI)
-		//fmt.Println("invalue type:", reflect.ValueOf(value).Type().Name())
-		fmt.Println("invalue type:", inValue.Type().Name())
-		//fmt.Printf("value kind:%#v %s, out elem kind:%#v %s\n", value.Kind(), value.Kind(), outElemKind, outElemKind)
 		if valueI.Kind() == reflect.Ptr && valueI.Kind() != outElemKind {
-			//valueIElem = valueI.Elem()
+			valueI = valueI.Elem()
 		}
 
-		//reflect.ValueOf(outValue.Index(i)).Set(value)  // panic: reflect: reflect.Value.Set using unaddressable value
 		outValue.Index(i).Set(valueI)
-		fmt.Println("outvalue elem type:", outValue.Index(i).Type().Name())
-		fmt.Println("fxxxx:", outValue.Index(i))
-
-		//recv := outValue.Index(i)
-		//if value.Type().AssignableTo(recv.Type()) {
-		//	if v, ok := value.Interface().(reflect.Value); ok {
-		//		value = v
-		//	} else if v.Kind() == reflect.Ptr {
-		//		v = v.Elem()
-		//	} else {
-		//		panic(fmt.Errorf("unassignable: %v to %v", value.Type(), recv.Type()))
-		//	}
-		//}
-		//recv.Set(value)
 	}
 }
 

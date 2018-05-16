@@ -40,56 +40,6 @@ var (
 	ErrIllegalPackage = jerrors.Errorf("illegal pacakge!")
 )
 
-// reflect return value
-func ReflectResponse(rsp interface{}, rspType reflect.Type) interface{} {
-	if rsp == nil {
-		return nil
-	}
-
-	switch rspType.Kind() {
-	case reflect.Bool:
-		return rsp.(bool)
-	case reflect.Int8:
-		return rsp.(int8)
-	case reflect.Int16:
-		return rsp.(int16)
-	case reflect.Int32:
-		return rsp.(int32)
-	case reflect.Int64:
-		return rsp.(int64)
-	case reflect.Uint16:
-		return rsp.(uint16)
-	case reflect.Float32:
-		return rsp.(float32)
-	case reflect.Float64:
-		return rsp.(float64)
-	case reflect.String:
-		return rsp.(string)
-	case reflect.Ptr:
-		return rsp.(reflect.Value).Elem().Interface()
-	case reflect.Slice, reflect.Array:
-		array := rsp.([]interface{})
-		var retArray = make([]interface{}, len(array))
-		for i := 0; i < len(array); i++ {
-			retArray[i] = array[i].(reflect.Value).Elem().Interface()
-		}
-		return retArray
-
-	case reflect.Map:
-		m := rsp.(map[interface{}]interface{})
-		var retMap = make(map[interface{}]interface{}, len(m))
-		for k, v := range m {
-			vv := v.(reflect.Value).Elem().Interface()
-			retMap[k] = vv
-		}
-		return retMap
-	case reflect.Struct:
-		return rsp.(reflect.Value).Elem().Interface()
-	}
-
-	return nil
-}
-
 // hessian decode respone
 func UnpackResponse(buf []byte) (interface{}, error) {
 	length := len(buf)
@@ -147,8 +97,47 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 }
 
 func cpSlice(in, out interface{}) {
-	fmt.Printf("@in %T, %v\n", in, in)
-	fmt.Printf("@out %T, %v\n", out, out)
+	inValue := reflect.ValueOf(in)
+	fmt.Println("$$", inValue)
+	fmt.Println("$$", inValue.Type())
+
+	outValue := reflect.ValueOf(out)
+	if outValue.Kind() == reflect.Ptr {
+		outValue = outValue.Elem()
+	}
+
+	outValue.Set(reflect.MakeSlice(outValue.Type(), inValue.Len(), inValue.Len()))
+	outElemKind := outValue.Type().Elem().Kind()
+	for i := 0; i < outValue.Len(); i++ {
+		valueI := inValue.Index(i).Interface().(reflect.Value)
+		fmt.Println(i, "#### in value:", valueI)
+		//fmt.Println("invalue type:", reflect.ValueOf(value).Type().Name())
+		fmt.Println("invalue type:", inValue.Type().Name())
+		//fmt.Printf("value kind:%#v %s, out elem kind:%#v %s\n", value.Kind(), value.Kind(), outElemKind, outElemKind)
+		if valueI.Kind() == reflect.Ptr && valueI.Kind() != outElemKind {
+			//valueIElem = valueI.Elem()
+		}
+
+		//reflect.ValueOf(outValue.Index(i)).Set(value)  // panic: reflect: reflect.Value.Set using unaddressable value
+		outValue.Index(i).Set(valueI)
+		fmt.Println("outvalue elem type:", outValue.Index(i).Type().Name())
+		fmt.Println("fxxxx:", outValue.Index(i))
+
+		//recv := outValue.Index(i)
+		//if value.Type().AssignableTo(recv.Type()) {
+		//	if v, ok := value.Interface().(reflect.Value); ok {
+		//		value = v
+		//	} else if v.Kind() == reflect.Ptr {
+		//		v = v.Elem()
+		//	} else {
+		//		panic(fmt.Errorf("unassignable: %v to %v", value.Type(), recv.Type()))
+		//	}
+		//}
+		//recv.Set(value)
+	}
+}
+
+func cpMap(in, out interface{}) {
 	inValue := reflect.ValueOf(in)
 	if inValue.Kind() == reflect.Ptr {
 		inValue = inValue.Elem()
@@ -178,51 +167,44 @@ func cpSlice(in, out interface{}) {
 }
 
 // reflect return value
-func ReflectResponse2(rsp interface{}, ret interface{}) error {
-	if rsp == nil {
-		return jerrors.Errorf("@rsp is nil")
+func ReflectResponse(in interface{}, out interface{}) error {
+	if in == nil {
+		return jerrors.Errorf("@in is nil")
 	}
 
-	if ret == nil {
-		return jerrors.Errorf("@ret is nil")
+	if out == nil {
+		return jerrors.Errorf("@out is nil")
 	}
-	if reflect.TypeOf(ret).Kind() != reflect.Ptr {
-		return jerrors.Errorf("@ret should be a pointer")
+	if reflect.TypeOf(out).Kind() != reflect.Ptr {
+		return jerrors.Errorf("@out should be a pointer")
 	}
 
-	rspType := reflect.TypeOf(rsp)
-	switch rspType.Kind() {
+	inType := reflect.TypeOf(in)
+	switch inType.Kind() {
 	case reflect.Bool:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(bool)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(bool)))
 	case reflect.Int8:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int8)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(int8)))
 	case reflect.Int16:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int16)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(int16)))
 	case reflect.Int32:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int32)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(int32)))
 	case reflect.Int64:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(int64)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(int64)))
 	case reflect.Float32:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(float32)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(float32)))
 	case reflect.Float64:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(float64)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(float64)))
 	case reflect.String:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(string)))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(string)))
 	case reflect.Ptr:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(reflect.Value).Elem().Interface()))
+		reflect.ValueOf(out).Elem().Set(reflect.ValueOf(in.(reflect.Value).Elem().Interface()))
 	case reflect.Struct:
-		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(rsp.(reflect.Value).Elem().Interface()))
+		reflect.ValueOf(out).Elem().Set(in.(reflect.Value)) // reflect.ValueOf(in.(reflect.Value)))
 	case reflect.Slice, reflect.Array:
-		cpSlice(rsp, ret)
-
-		//case reflect.Map:
-		//	m := rsp.(map[interface{}]interface{})
-		//	var retMap = make(map[interface{}]interface{}, len(m))
-		//	for k, v := range m {
-		//		vv := v.(reflect.Value).Elem().Interface()
-		//		retMap[k] = vv
-		//	}
-		//	return retMap
+		cpSlice(in, out)
+	case reflect.Map:
+		cpMap(in, out)
 	}
 
 	return nil

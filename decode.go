@@ -800,8 +800,7 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 
 	switch {
 	case (tag >= BC_LIST_DIRECT && tag <= 0x77) || (tag == BC_LIST_FIXED || tag == BC_LIST_VARIABLE):
-		ts, _ := d.decType() // 忽略
-		fmt.Printf("ts:%s\n", ts)
+		d.decType() // 忽略
 		if tag >= BC_LIST_DIRECT && tag <= 0x77 {
 			size = int(tag - BC_LIST_DIRECT)
 		} else {
@@ -815,7 +814,6 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		d.appendRefs(arr)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
-			fmt.Printf("idx:%d, obj:%T %#v\n", j, it, it)
 			if err != nil {
 				return nil, jerrors.Trace(err)
 			}
@@ -842,6 +840,8 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		d.appendRefs(arr)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
+			fmt.Printf("idx:%d, obj:%T %#v\n", j, it, it)
+			fmt.Println("it###:", it)
 			if err != nil {
 				return nil, jerrors.Trace(err)
 			}
@@ -852,6 +852,8 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 			d.readBufByte()
 		}
 
+		fmt.Println("array###:", arr)
+		fmt.Println("array[0]###:", arr[0])
 		return arr, nil
 
 	default:
@@ -1131,9 +1133,9 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 	if typ.Kind() != reflect.Struct {
 		return nil, jerrors.Errorf("wrong type expect Struct but get:%s", typ.String())
 	}
-	vPtr := reflect.New(typ)
-	vRef := reflect.ValueOf(vPtr.Interface()).Elem()
-	d.appendRefs(vPtr)
+
+	vRef := reflect.New(typ).Elem()
+	d.appendRefs(vRef)
 	for i = 0; i < len(cls.fieldNameList); i++ {
 		fieldName := cls.fieldNameList[i]
 		index, err := findField(fieldName, typ)
@@ -1210,7 +1212,6 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 			d.decMapByValue(fldValue)
 
 		case kind == reflect.Slice || kind == reflect.Array:
-			// m, _ := d.Decode()
 			m, e := d.decList(TAG_READ)
 			if e != nil {
 				return nil, jerrors.Trace(err)
@@ -1250,7 +1251,10 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 		}
 	}
 
-	return vPtr, nil
+	fmt.Println("vRef name:", vRef.Type().Name())
+	fmt.Println("vRef value:", vRef)
+	//return vPtr, nil
+	return vRef, nil
 }
 
 func (d *Decoder) appendClsDef(cd classInfo) {

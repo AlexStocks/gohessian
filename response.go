@@ -98,7 +98,7 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	}
 
 	// Header{serialization id(5 bit), event, two way, req/response}
-	var serialID byte = buf[2] & SERIALIZATION_MASK
+	var serialID = buf[2] & SERIALIZATION_MASK
 	if serialID == byte(0x00) {
 		return nil, jerrors.Errorf("serialization ID:%v", serialID)
 	}
@@ -110,7 +110,7 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	//if twoWayFlag == byte(0x00) {
 	//	return nil, jerrors.Errorf("twoway flag:%v", twoWayFlag)
 	//}
-	var rspFlag byte = buf[2] & FLAG_REQUEST
+	var rspFlag = buf[2] & FLAG_REQUEST
 	if rspFlag != byte(0x00) {
 		return nil, jerrors.Errorf("response flag:%v", rspFlag)
 	}
@@ -125,7 +125,7 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	//fmt.Printf("response package id:%#X\n", ID)
 
 	// Header{body len}
-	var bodyLen int32 = int32(binary.BigEndian.Uint32(buf[12:]))
+	var bodyLen = int32(binary.BigEndian.Uint32(buf[12:]))
 	//fmt.Printf("response package body length:%d\n", bodyLen)
 	if int(bodyLen+HEADER_LENGTH) != length {
 		return nil, ErrIllegalPackage
@@ -167,12 +167,13 @@ func cpSlice(in, out interface{}) {
 	outElemKind := outValue.Type().Elem().Kind()
 	for i := 0; i < outValue.Len(); i++ {
 		value := inValue.Index(i)
+		fmt.Printf("value kind:%#v %s, out elem kind:%#v %s\n", value.Kind(), value.Kind(), outElemKind, outElemKind)
 		if value.Kind() != outElemKind {
 			value = value.Elem()
 		}
-		outValue.Index(i).Set(value)
-		//reflect.ValueOf(outValue.Index(i)).Elem().Set(reflect.ValueOf(value.Interface()))
-		//reflect.ValueOf(outValue.Index(i)).Set(reflect.ValueOf(value.Interface()))
+
+		//reflect.ValueOf(outValue.Index(i)).Set(value)  // panic: reflect: reflect.Value.Set using unaddressable value
+		outValue.Index(i).Set(value) // panic: reflect.Set: value of type reflect.Value is not assignable to type main.User
 	}
 }
 

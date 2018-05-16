@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"reflect"
@@ -21,6 +22,7 @@ import (
 )
 
 import (
+	log "github.com/AlexStocks/log4go"
 	jerrors "github.com/juju/errors"
 )
 
@@ -102,36 +104,6 @@ func (d *Decoder) nextRune(s []rune) []rune {
 	return s
 }
 
-func (d *Decoder) decListType() (string, reflect.Type, error) {
-	var (
-		err error
-		arr [1]byte
-		buf []byte
-		tag byte
-		idx int32
-		tn  string
-		typ reflect.Type
-	)
-
-	buf = arr[:1]
-	if _, err = io.ReadFull(d.reader, buf); err != nil {
-		return tn, typ, jerrors.Trace(err)
-	}
-	tag = buf[0]
-	if (tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
-		(tag >= 0x30 && tag <= 0x33) || (tag == BC_STRING) || (tag == BC_STRING_CHUNK) {
-		tn, err = d.decString(int32(tag))
-		return tn, typ, err
-	}
-
-	if idx, err = d.decInt32(TAG_READ); err != nil {
-		return tn, typ, jerrors.Trace(err)
-	}
-
-	typ, _, err = d.getStructDefByIndex(int(idx))
-	return tn, typ, jerrors.Trace(err)
-}
-
 // 读取数据类型描述,用于 list 和 map
 func (d *Decoder) decType() (string, error) {
 	var (
@@ -148,6 +120,7 @@ func (d *Decoder) decType() (string, error) {
 		return "", jerrors.Trace(err)
 	}
 	tag = buf[0]
+	fmt.Printf("list type :%#X\n", tag)
 	if (tag >= BC_STRING_DIRECT && tag <= STRING_DIRECT_MAX) ||
 		(tag >= 0x30 && tag <= 0x33) || (tag == BC_STRING) || (tag == BC_STRING_CHUNK) {
 		return d.decString(int32(tag))
@@ -811,6 +784,7 @@ func (d *Decoder) readBufByte() (byte, error) {
 
 func (d *Decoder) decList(flag int32) (interface{}, error) {
 	var (
+		err  error
 		tag  byte
 		size int
 	)
@@ -818,12 +792,16 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 	if flag != TAG_READ {
 		tag = byte(flag)
 	} else {
-		tag, _ = d.readByte()
+		tag, err = d.readByte()
+		if err != nil {
+			return nil, jerrors.Trace(err)
+		}
 	}
 
 	switch {
 	case (tag >= BC_LIST_DIRECT && tag <= 0x77) || (tag == BC_LIST_FIXED || tag == BC_LIST_VARIABLE):
-		d.decType() // 忽略
+		ts, _ := d.decType() // 忽略
+		fmt.Printf("ts:%s\n", ts)
 		if tag >= BC_LIST_DIRECT && tag <= 0x77 {
 			size = int(tag - BC_LIST_DIRECT)
 		} else {
@@ -837,6 +815,7 @@ func (d *Decoder) decList(flag int32) (interface{}, error) {
 		d.appendRefs(arr)
 		for j := 0; j < size; j++ {
 			it, err := d.Decode()
+			fmt.Printf("idx:%d, obj:%T %#v\n", j, it, it)
 			if err != nil {
 				return nil, jerrors.Trace(err)
 			}
@@ -1152,18 +1131,19 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 	if typ.Kind() != reflect.Struct {
 		return nil, jerrors.Errorf("wrong type expect Struct but get:%s", typ.String())
 	}
-	vv := reflect.New(typ)
-	st := reflect.ValueOf(vv.Interface()).Elem()
-	d.appendRefs(vv)
+	vPtr := reflect.New(typ)
+	vRef := reflect.ValueOf(vPtr.Interface()).Elem()
+	d.appendRefs(vPtr)
 	for i = 0; i < len(cls.fieldNameList); i++ {
-		fldName := cls.fieldNameList[i]
-		index, err := findField(fldName, typ)
+		fieldName := cls.fieldNameList[i]
+		index, err := findField(fieldName, typ)
 		if err != nil {
+			log.Warn("can not find field %s", fieldName)
 			continue
 		}
-		fldValue := st.Field(index)
+		fldValue := vRef.Field(index)
 		if !fldValue.CanSet() {
-			return nil, jerrors.Errorf("decInstance CanSet false for field %s", fldName)
+			return nil, jerrors.Errorf("decInstance CanSet false for field %s", fieldName)
 		}
 
 		kind := fldValue.Kind()
@@ -1171,7 +1151,7 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 		case kind == reflect.String:
 			str, err := d.decString(TAG_READ)
 			if err != nil {
-				return nil, jerrors.Annotatef(err, "decInstance->ReadString: %s", fldName)
+				return nil, jerrors.Annotatef(err, "decInstance->ReadString: %s", fieldName)
 			}
 			fldValue.SetString(str)
 
@@ -1183,12 +1163,12 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 					d.unreadByte() // enum解析，上面decInt64已经读取一个字节，所以这里需要回退一个字节
 					s, err := d.Decode()
 					if err != nil {
-						return nil, jerrors.Annotatef(err, "decInstance->decObject field name:%s", fldName)
+						return nil, jerrors.Annotatef(err, "decInstance->decObject field name:%s", fieldName)
 					}
 					enumValue, _ := s.(JavaEnum)
 					num = int32(enumValue)
 				} else {
-					return nil, jerrors.Annotatef(err, "decInstance->ParseInt, field name:%s", fldName)
+					return nil, jerrors.Annotatef(err, "decInstance->ParseInt, field name:%s", fieldName)
 				}
 			}
 
@@ -1201,12 +1181,12 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 					d.unreadByte() // enum解析，上面decInt64已经读取一个字节，所以这里需要回退一个字节
 					s, err := d.Decode()
 					if err != nil {
-						return nil, jerrors.Annotatef(err, "decInstance->decObject field name:%s", fldName)
+						return nil, jerrors.Annotatef(err, "decInstance->decObject field name:%s", fieldName)
 					}
 					enumValue, _ := s.(JavaEnum)
 					num = int64(enumValue)
 				} else {
-					return nil, jerrors.Annotatef(err, "decInstance->decInt64 field name:%s", fldName)
+					return nil, jerrors.Annotatef(err, "decInstance->decInt64 field name:%s", fieldName)
 				}
 			}
 
@@ -1215,14 +1195,14 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 		case kind == reflect.Bool:
 			b, err := d.Decode()
 			if err != nil {
-				return nil, jerrors.Annotatef(err, "decInstance->Decode field name:%s", fldName)
+				return nil, jerrors.Annotatef(err, "decInstance->Decode field name:%s", fieldName)
 			}
 			fldValue.SetBool(b.(bool))
 
 		case kind == reflect.Float32 || kind == reflect.Float64:
 			num, err := d.decDouble(TAG_READ)
 			if err != nil {
-				return nil, jerrors.Annotatef(err, "decInstance->decDouble field name:%s", fldName)
+				return nil, jerrors.Annotatef(err, "decInstance->decDouble field name:%s", fieldName)
 			}
 			fldValue.SetFloat(num.(float64))
 
@@ -1231,7 +1211,10 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 
 		case kind == reflect.Slice || kind == reflect.Array:
 			// m, _ := d.Decode()
-			m, _ := d.decList(TAG_READ)
+			m, e := d.decList(TAG_READ)
+			if e != nil {
+				return nil, jerrors.Trace(err)
+			}
 			v := reflect.ValueOf(m)
 			if v.Len() > 0 {
 				sl := reflect.MakeSlice(fldValue.Type(), v.Len(), v.Len())
@@ -1249,13 +1232,13 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 			if fldValue.Type().String() == "time.Time" {
 				s, err = d.decDate(TAG_READ)
 				if err != nil {
-					return nil, jerrors.Annotate(err, "decInstance->decDate")
+					return nil, jerrors.Trace(err)
 				}
 				fldValue.Set(reflect.ValueOf(s))
 			} else {
 				s, err = d.decObject(TAG_READ)
 				if err != nil {
-					return nil, jerrors.Annotate(err, "decInstance->decObject")
+					return nil, jerrors.Trace(err)
 				}
 				if s != nil {
 					fldValue.Set(reflect.Indirect(s.(reflect.Value)))
@@ -1267,7 +1250,7 @@ func (d *Decoder) decInstance(typ reflect.Type, cls classInfo) (interface{}, err
 		}
 	}
 
-	return vv, nil
+	return vPtr, nil
 }
 
 func (d *Decoder) appendClsDef(cd classInfo) {

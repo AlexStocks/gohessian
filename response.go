@@ -16,7 +16,6 @@ import (
 )
 
 import (
-	log "github.com/AlexStocks/log4go"
 	jerrors "github.com/juju/errors"
 )
 
@@ -95,11 +94,10 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	return nil, nil
 }
 
-func cpSlice(in, out interface{}) {
+func cpSlice(in, out interface{}) error {
 	inSlice := reflect.ValueOf(in)
 	if inSlice.IsNil() {
-		panic("@in is nil")
-		return
+		return jerrors.New("@in is nil")
 	}
 
 	outSlice := reflect.ValueOf(out)
@@ -108,33 +106,34 @@ func cpSlice(in, out interface{}) {
 	}
 
 	outSlice.Set(reflect.MakeSlice(outSlice.Type(), inSlice.Len(), inSlice.Len()))
-	outElemKind := outSlice.Type().Elem().Kind()
+	//outElemKind := outSlice.Type().Elem().Kind()
 	for i := 0; i < outSlice.Len(); i++ {
-		valueI := inSlice.Index(i)
+		inSliceValue := inSlice.Index(i)
 		if outSlice.Index(i).Kind() == reflect.Struct {
-			if valueI.Kind() == reflect.Ptr && valueI.Kind() != outElemKind {
-				valueI = valueI.Elem()
-			}
-			valueI = valueI.Interface().(reflect.Value)
-		}
-		if valueI.Type().AssignableTo(outSlice.Index(i).Type()) {
-			outSlice.Index(i).Set(valueI)
+			//if inSliceValue.Kind() == reflect.Ptr && inSliceValue.Kind() != outElemKind {
+			//	inSliceValue = inSliceValue.Elem()
+			//}
+			inSliceValue = inSliceValue.Interface().(reflect.Value)
 		} else {
-			panic(jerrors.Errorf("in element type %s can not assign to out element type %s",
-				valueI.Type().Name(), outSlice.Type().Name()))
+			inSliceValue = reflect.ValueOf(inSliceValue)
 		}
+		if !inSliceValue.Type().AssignableTo(outSlice.Index(i).Type()) {
+			return jerrors.Errorf("in element type %s can not assign to out element type %s",
+				inSliceValue.Type().Name(), outSlice.Type().Name())
+		}
+		outSlice.Index(i).Set(inSliceValue)
 	}
+
+	return nil
 }
 
-func cpMap(in, out interface{}) {
+func cpMap(in, out interface{}) error {
 	inMapValue := reflect.ValueOf(in)
 	if inMapValue.IsNil() {
-		panic("@in is nil")
-		return
+		return jerrors.New("@in is nil")
 	}
 	if !inMapValue.CanInterface() {
-		panic("@in's Interface can not be used.")
-		return
+		return jerrors.New("@in's Interface can not be used.")
 	}
 	inMap := inMapValue.Interface().(map[interface{}]interface{})
 
@@ -161,17 +160,17 @@ func cpMap(in, out interface{}) {
 			inValue = inMap[k].(reflect.Value)
 		}
 		if !inKey.Type().AssignableTo(outKeyType) {
-			log.Warn("in Key:{type:%s, value:%#v} can not assign to out Key:{type:%s} ",
+			return jerrors.Errorf("in Key:{type:%s, value:%#v} can not assign to out Key:{type:%s} ",
 				inKey.Type().Name(), inKey, outKeyType.Name())
-			continue
 		}
 		if !inValue.Type().AssignableTo(outValueType) {
-			log.Warn("in Value:{type:%s, value:%#v} can not assign to out value:{type:%s}",
+			return jerrors.Errorf("in Value:{type:%s, value:%#v} can not assign to out value:{type:%s}",
 				inValue.Type().Name(), inValue, outValueType.Name())
-			continue
 		}
 		outMap.SetMapIndex(inKey, inValue)
 	}
+
+	return nil
 }
 
 // reflect return value
@@ -210,9 +209,9 @@ func ReflectResponse(in interface{}, out interface{}) error {
 	case reflect.Struct:
 		reflect.ValueOf(out).Elem().Set(in.(reflect.Value)) // reflect.ValueOf(in.(reflect.Value)))
 	case reflect.Slice, reflect.Array:
-		cpSlice(in, out)
+		return cpSlice(in, out)
 	case reflect.Map:
-		cpMap(in, out)
+		return cpMap(in, out)
 	}
 
 	return nil

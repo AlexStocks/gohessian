@@ -31,7 +31,7 @@ type Encoder struct {
 }
 
 func NewEncoder() *Encoder {
-	var buffer []byte = make([]byte, 64)
+	var buffer = make([]byte, 64)
 
 	return &Encoder{
 		buffer: buffer[:0],

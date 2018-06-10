@@ -46,20 +46,16 @@ const (
 	FLAG_TWOWAY  = byte(0x40)
 	FLAG_EVENT   = byte(0x20) // for heartbeat
 
-	SERIALIZATION_MASK = byte(0x1f)
-)
+	SERIALIZATION_MASK = 0x1f
 
-const (
 	DUBBO_VERSION = "2.5.4"
-)
-
-const (
-	DEFAULT_LEN        = 8388608 // 8 * 1024 * 1024 default body max length
-	PACKET_DEFAULT_LEN = 131400  // 128 * 1024 default one buf max length
+	DEFAULT_LEN   = 8388608 // 8 * 1024 * 1024 default body max length
 )
 
 var (
-	REQUEST_HEADER = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_TWOWAY | FLAG_REQUEST}
+	DubboHeader    = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY}
+	DubboHeartbeat = [...]byte{MAGIC_HIGH, MAGIC_LOW, 0xe2, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x01, 0x4e}
 )
 
 // com.alibaba.dubbo.common.utils.ReflectUtils.ReflectUtils.java line245 getDesc
@@ -149,30 +145,40 @@ func getArgsTypeList(args []interface{}) (string, error) {
 }
 
 // create request buffer body
-func PackRequest(reqID int64, path, dubboInterface, version, method string, args []interface{}, timeout int) ([]byte, error) {
+func PackRequest(hb bool, reqID int64, path, dubboInterface, version, method string, args []interface{},
+	timeout int) ([]byte, error) {
 	var sirializationID = byte(78) // java 中标识一个class的ID
-	var header = make([]byte, HEADER_LENGTH<<10)
-	header = header[:0]
 
 	//////////////////////////////////////////
 	// header
 	//////////////////////////////////////////
+	var header []byte
 
 	// magic
-	header = append(header, REQUEST_HEADER[:]...)
+	header = append(header, DubboHeader[:]...)
 	// serialization id, two way flag, event, request/response flag
 	header[2] |= byte(sirializationID & SERIALIZATION_MASK)
+	if hb {
+		//header[2] |= byte(FLAG_EVENT)
+		return DubboHeartbeat[:], nil
+	}
 	// request id
 	binary.BigEndian.PutUint64(header[4:], uint64(reqID))
+
+	//模拟dubbo的请求
+	var encoder Encoder
+	encoder.Append(header[:HEADER_LENGTH])
 
 	// com.alibaba.dubbo.rpc.protocol.dubbo.DubboCodec.DubboCodec.java line144 encodeRequestData
 	//////////////////////////////////////////
 	// body
 	//////////////////////////////////////////
-
-	//模拟dubbo的请求
-	var encoder Encoder
-	encoder.Append(header[:HEADER_LENGTH])
+	if hb {
+		encoder.Encode(nil)
+		encBuf := encoder.Buffer()
+		binary.BigEndian.PutUint32(encBuf[12:], uint32(1))
+		return encBuf, nil
+	}
 
 	// dubbo version + path + version + method
 	encoder.Encode(DUBBO_VERSION)

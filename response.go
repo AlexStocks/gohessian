@@ -16,6 +16,7 @@ import (
 )
 
 import (
+	"fmt"
 	jerrors "github.com/juju/errors"
 )
 
@@ -67,6 +68,12 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	// Header{status}
 	if buf[3] != Response_OK {
 		return nil, jerrors.Errorf("Response not OK, java exception:%s", string(buf[18:length-1]))
+	}
+
+	// check heartbeat response
+	fmt.Println("hearbeat value:", (buf[2]&FLAG_EVENT)>>5)
+	if (buf[2]&FLAG_EVENT)>>5 != byte(0x00) {
+		return nil, nil
 	}
 
 	// Header{req id}

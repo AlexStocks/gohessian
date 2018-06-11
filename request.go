@@ -53,9 +53,8 @@ const (
 )
 
 var (
-	DubboHeader    = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY}
-	DubboHeartbeat = [...]byte{MAGIC_HIGH, MAGIC_LOW, 0xe2, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x01, 0x4e}
+	DubboHeader          = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY}
+	DubboHeartbeatHeader = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY | FLAG_EVENT | 0x0F}
 )
 
 // com.alibaba.dubbo.common.utils.ReflectUtils.ReflectUtils.java line245 getDesc
@@ -155,13 +154,13 @@ func PackRequest(hb bool, reqID int64, path, dubboInterface, version, method str
 	var header []byte
 
 	// magic
-	header = append(header, DubboHeader[:]...)
+	if hb {
+		header = append(header, DubboHeartbeatHeader[:]...)
+	} else {
+		header = append(header, DubboHeader[:]...)
+	}
 	// serialization id, two way flag, event, request/response flag
 	header[2] |= byte(sirializationID & SERIALIZATION_MASK)
-	if hb {
-		//header[2] |= byte(FLAG_EVENT)
-		return DubboHeartbeat[:], nil
-	}
 	// request id
 	binary.BigEndian.PutUint64(header[4:], uint64(reqID))
 

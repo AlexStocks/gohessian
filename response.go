@@ -34,6 +34,8 @@ const (
 	RESPONSE_WITH_EXCEPTION int32 = 0
 	RESPONSE_VALUE          int32 = 1
 	RESPONSE_NULL_VALUE     int32 = 2
+
+	HEARTBEAT_RESPONSE = "dubbo_hearbeat"
 )
 
 var (
@@ -52,14 +54,19 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	if serialID == byte(0x00) {
 		return nil, jerrors.Errorf("serialization ID:%v", serialID)
 	}
-	//var eventFlag byte = buf[2] & FLAG_EVENT
-	//if eventFlag == byte(0x00) {
-	//	return nil, jerrors.Errorf("event flag:%v", eventFlag)
-	//}
-	//var twoWayFlag byte = buf[2] & FLAG_TWOWAY
-	//if twoWayFlag == byte(0x00) {
-	//	return nil, jerrors.Errorf("twoway flag:%v", twoWayFlag)
-	//}
+	// check heartbeat response
+	fmt.Println("hearbeat value:", (buf[2]&FLAG_EVENT)>>5)
+	if (buf[2]&FLAG_EVENT)>>5 == byte(0x01) && len(buf) == 17 && buf[16] == byte('N') {
+		return HEARTBEAT_RESPONSE, nil
+	}
+	var eventFlag = buf[2] & FLAG_EVENT
+	if eventFlag == byte(0x00) {
+		return nil, jerrors.Errorf("event flag:%v", eventFlag)
+	}
+	var twoWayFlag = buf[2] & FLAG_TWOWAY
+	if twoWayFlag == byte(0x00) {
+		return nil, jerrors.Errorf("twoway flag:%v", twoWayFlag)
+	}
 	var rspFlag = buf[2] & FLAG_REQUEST
 	if rspFlag != byte(0x00) {
 		return nil, jerrors.Errorf("response flag:%v", rspFlag)
@@ -68,12 +75,6 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	// Header{status}
 	if buf[3] != Response_OK {
 		return nil, jerrors.Errorf("Response not OK, java exception:%s", string(buf[18:length-1]))
-	}
-
-	// check heartbeat response
-	fmt.Println("hearbeat value:", (buf[2]&FLAG_EVENT)>>5)
-	if (buf[2]&FLAG_EVENT)>>5 != byte(0x00) {
-		return nil, nil
 	}
 
 	// Header{req id}

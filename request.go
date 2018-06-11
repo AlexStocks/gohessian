@@ -45,8 +45,7 @@ const (
 	FLAG_REQUEST = byte(0x80)
 	FLAG_TWOWAY  = byte(0x40)
 	FLAG_EVENT   = byte(0x20) // for heartbeat
-
-	SERIALIZATION_MASK = 0x1f
+	SERIAL_MASK  = byte(0x1f)
 
 	DUBBO_VERSION = "2.5.4"
 	DEFAULT_LEN   = 8388608 // 8 * 1024 * 1024 default body max length
@@ -160,7 +159,7 @@ func PackRequest(hb bool, reqID int64, path, dubboInterface, version, method str
 		header = append(header, DubboHeader[:]...)
 	}
 	// serialization id, two way flag, event, request/response flag
-	header[2] |= byte(sirializationID & SERIALIZATION_MASK)
+	header[2] |= byte(sirializationID & SERIAL_MASK)
 	// request id
 	binary.BigEndian.PutUint64(header[4:], uint64(reqID))
 

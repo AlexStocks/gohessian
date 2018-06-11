@@ -21,15 +21,15 @@ import (
 )
 
 const (
-	Response_OK                byte = 20
-	Response_CLIENT_TIMEOUT    byte = 30
-	Response_SERVER_TIMEOUT    byte = 31
-	Response_BAD_REQUEST       byte = 40
-	Response_BAD_RESPONSE      byte = 50
-	Response_SERVICE_NOT_FOUND byte = 60
-	Response_SERVICE_ERROR     byte = 70
-	Response_SERVER_ERROR      byte = 80
-	Response_CLIENT_ERROR      byte = 90
+	RESPONSE_OK                byte = 20
+	RESPONSE_CLIENT_TIMEOUT    byte = 30
+	RESPONSE_SERVER_TIMEOUT    byte = 31
+	RESPONSE_BAD_REQUEST       byte = 40
+	RESPONSE_BAD_RESPONSE      byte = 50
+	RESPONSE_SERVICE_NOT_FOUND byte = 60
+	RESPONSE_SERVICE_ERROR     byte = 70
+	RESPONSE_SERVER_ERROR      byte = 80
+	RESPONSE_CLIENT_ERROR      byte = 90
 
 	RESPONSE_WITH_EXCEPTION int32 = 0
 	RESPONSE_VALUE          int32 = 1
@@ -50,7 +50,7 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	}
 
 	// Header{serialization id(5 bit), event, two way, req/response}
-	var serialID = buf[2] & SERIALIZATION_MASK
+	var serialID = buf[2] & SERIAL_MASK
 	if serialID == byte(0x00) {
 		return nil, jerrors.Errorf("serialization ID:%v", serialID)
 	}
@@ -73,7 +73,7 @@ func UnpackResponse(buf []byte) (interface{}, error) {
 	}
 
 	// Header{status}
-	if buf[3] != Response_OK {
+	if buf[3] != RESPONSE_OK {
 		return nil, jerrors.Errorf("Response not OK, java exception:%s", string(buf[18:length-1]))
 	}
 

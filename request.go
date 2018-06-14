@@ -17,6 +17,7 @@ import (
 )
 
 import (
+	"fmt"
 	jerrors "github.com/juju/errors"
 )
 
@@ -52,8 +53,9 @@ const (
 )
 
 var (
-	DubboHeader          = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY}
-	DubboHeartbeatHeader = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY | FLAG_EVENT | 0x0F}
+	DubboHeader = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY}
+	// DubboHeartbeatHeader = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY | FLAG_EVENT | 0x0F}
+	DubboHeartbeatHeader = [HEADER_LENGTH]byte{MAGIC_HIGH, MAGIC_LOW, FLAG_REQUEST | FLAG_TWOWAY | FLAG_EVENT}
 )
 
 // com.alibaba.dubbo.common.utils.ReflectUtils.ReflectUtils.java line245 getDesc
@@ -145,7 +147,8 @@ func getArgsTypeList(args []interface{}) (string, error) {
 // create request buffer body
 func PackRequest(hb bool, reqID int64, path, dubboInterface, version, method string, args []interface{},
 	timeout int) ([]byte, error) {
-	var sirializationID = byte(78) // java 中标识一个class的ID
+	var serializationID = byte(reqID) // java 中标识一个class的ID
+	fmt.Printf("reqID %d, seialID %d\n", reqID, serializationID)
 
 	//////////////////////////////////////////
 	// header
@@ -159,7 +162,9 @@ func PackRequest(hb bool, reqID int64, path, dubboInterface, version, method str
 		header = append(header, DubboHeader[:]...)
 	}
 	// serialization id, two way flag, event, request/response flag
-	header[2] |= byte(sirializationID & SERIAL_MASK)
+	fmt.Printf("pre header[2]:%#X \n", header[2])
+	header[2] |= byte(serializationID & SERIAL_MASK)
+	fmt.Printf("post header[2]:%#X \n", header[2])
 	// request id
 	binary.BigEndian.PutUint64(header[4:], uint64(reqID))
 
